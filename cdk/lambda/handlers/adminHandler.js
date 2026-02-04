@@ -20,7 +20,6 @@ const {
   GetParameterCommand,
   PutParameterCommand,
 } = require("@aws-sdk/client-ssm");
-const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
 const {
   CloudWatchLogsClient,
   GetLogEventsCommand,
@@ -29,7 +28,6 @@ const {
 let sqlConnection;
 const secretsManager = new SecretsManagerClient();
 const ssmClient = new SSMClient();
-const sqsClient = new SQSClient();
 const cloudwatchLogsClient = new CloudWatchLogsClient();
 
 const initConnection = async () => {

@@ -23,7 +23,6 @@ import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
-import * as sqs from "aws-cdk-lib/aws-sqs";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
