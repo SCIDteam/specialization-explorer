@@ -249,6 +249,20 @@ export class ApiGatewayStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY,
     });
 
+    // create CloudWatch logs role required for WebSocket access logs
+    const apiGatewayLogsRole = new iam.Role(this, "ApiGatewayCloudWatchLogsRole", {
+      assumedBy: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      managedPolicies: [
+        iam.ManagedPolicy.fromAwsManagedPolicyName(
+          "service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+        ),
+      ],
+    });
+
+    const apiGatewayAccount = new apigateway.CfnAccount(this, "ApiGatewayAccount", {
+      cloudWatchRoleArn: apiGatewayLogsRole.roleArn,
+    });
+
     // Create roles and policies
     const createPolicyStatement = (actions: string[], resources: string[]) => {
       return new iam.PolicyStatement({
@@ -1704,6 +1718,8 @@ export class ApiGatewayStack extends cdk.Stack {
         }),
       },
     });
+
+    this.wsStage.node.addDependency(apiGatewayAccount);
 
     // Add environment variable to text generation function (include stage name)
     textGenLambdaDockerFunc.addEnvironment(
