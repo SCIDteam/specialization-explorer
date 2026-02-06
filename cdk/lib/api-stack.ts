@@ -1811,13 +1811,14 @@ export class ApiGatewayStack extends cdk.Stack {
     );
 
     // Provisioned Concurrency enabled with 1 execution to improve cold start performance
+    // removed for now since we don't have enough quota
     const practiceMaterialAlias = new lambda.Alias(
       this,
       `${id}-PracticeMaterialAlias`,
       {
         aliasName: "live",
         version: practiceMaterialDockerFunc.currentVersion,
-        provisionedConcurrentExecutions: 1,
+        // provisionedConcurrentExecutions: 1,
       }
     );
 
