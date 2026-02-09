@@ -77,7 +77,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
 │       │   ├── Admin/
 │       │   ├── ChatInterface/
 │       │   ├── HomePage/
-│       │   ├── MaterialEditorPage/
 │       │   ├── ui/
 │       │   ├── Footer.tsx
 │       │   ├── Header.tsx
@@ -141,7 +140,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
      - `/Admin`: Admin dashboard components
      - `/ChatInterface`: Chat UI and message components
      - `/HomePage`: Landing page components
-     - `/MaterialEditorPage`: Material editor UI components
      - `/ui`: shadcn/ui base components (buttons, dialogs, cards, etc.)
    - `/src/contexts`: Legacy React contexts for state management
    - `/src/functions`: Helper functions and business logic
