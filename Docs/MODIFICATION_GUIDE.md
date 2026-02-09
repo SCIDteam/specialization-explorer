@@ -142,7 +142,7 @@ Note: The project has many existing handlers under `cdk/lambda/handlers/` such a
 
 The frontend code is in `frontend/src/` and organized as:
 - `pages/` for route pages (e.g., `ChatInterface`, `FAQ`, `Admin`, `MaterialEditor`)
-- `components/` for reusable UI blocks (e.g., `Admin`, `ChatInterface`, `FAQPage`, `ui` based components)
+- `components/` for reusable UI blocks (e.g., `Admin`, `ChatInterface`, `ui` based components)
 - `providers/` for React context (e.g., `UserSessionContext`, `ModeContext`)
 - `hooks/`, `lib/`, `utils/`, and `types/` for utility functions and types
 

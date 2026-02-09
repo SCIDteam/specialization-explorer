@@ -76,7 +76,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
 │       ├── components/
 │       │   ├── Admin/
 │       │   ├── ChatInterface/
-│       │   ├── FAQPage/
 │       │   ├── HomePage/
 │       │   ├── MaterialEditorPage/
 │       │   ├── ui/
@@ -141,7 +140,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
    - `/src/components`: Reusable UI components
      - `/Admin`: Admin dashboard components
      - `/ChatInterface`: Chat UI and message components
-     - `/FAQPage`: FAQ display and management components
      - `/HomePage`: Landing page components
      - `/MaterialEditorPage`: Material editor UI components
      - `/ui`: shadcn/ui base components (buttons, dialogs, cards, etc.)
