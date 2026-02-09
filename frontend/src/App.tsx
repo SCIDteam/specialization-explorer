@@ -5,7 +5,6 @@ import UserGuidelines from "./pages/UserGuidelines";
 import { UserSessionProvider } from "./providers/UserSessionContext";
 import { ModeProvider } from "@/providers/ModeContext";
 import TextbookLayout from "./layouts/TextbookLayout";
-import PracticeMaterialPage from "./pages/PracticeMaterial/PracticeMaterialPage";
 import FAQPage from "./pages/FAQ/FAQPage";
 import MaterialEditorPage from "./pages/MaterialEditor/MaterialEditorPage";
 import AdminLogin from "./pages/Admin/AdminLogin";
@@ -77,7 +76,6 @@ function App() {
             <Route path="/guidelines" element={<UserGuidelines />} />
             <Route path="/textbook/:id" element={<TextbookLayout />}>
               <Route path="chat" element={<AIChatPage />} />
-              <Route path="practice" element={<PracticeMaterialPage />} />
               <Route path="faq" element={<FAQPage />} />
               <Route path="material-editor" element={<MaterialEditorPage />} />
             </Route>

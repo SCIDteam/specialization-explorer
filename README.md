@@ -79,7 +79,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
 │       │   ├── FAQPage/
 │       │   ├── HomePage/
 │       │   ├── MaterialEditorPage/
-│       │   ├── PracticeMaterialPage/
 │       │   ├── ui/
 │       │   ├── Footer.tsx
 │       │   ├── Header.tsx
@@ -145,7 +144,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
      - `/FAQPage`: FAQ display and management components
      - `/HomePage`: Landing page components
      - `/MaterialEditorPage`: Material editor UI components
-     - `/PracticeMaterialPage`: Practice material generation components
      - `/ui`: shadcn/ui base components (buttons, dialogs, cards, etc.)
    - `/src/contexts`: Legacy React contexts for state management
    - `/src/functions`: Helper functions and business logic
