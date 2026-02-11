@@ -394,54 +394,121 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
 
-      case "DELETE /chat_sessions/{chat_session_id}":
-        const deleteChatSessionId = event.pathParameters?.chat_session_id;
-        const deleteUserSessionId = event.queryStringParameters?.user_session_id;
+      case "DELETE /chat_sessions/{chat_session_id}": {
+        const chatSessionId = event.pathParameters?.chat_session_id;
 
-        if (!deleteChatSessionId) {
+        // Accept both names for compatibility while you transition
+        const userId =
+          event.queryStringParameters?.user_id ||
+          event.queryStringParameters?.user_session_id;
+
+        if (!chatSessionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "chat_session_id is required" });
           break;
         }
 
-        if (!deleteUserSessionId) {
+        if (!userId) {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_session_id is required" });
+          response.body = JSON.stringify({ error: "user_id is required" });
           break;
         }
 
         // Verify the chat session exists and belongs to the user
-        const chatSessionToDelete = await sqlConnection`
-          SELECT id, user_session_id FROM chat_sessions WHERE id = ${deleteChatSessionId}
+        const chatSession = await sqlConnection`
+          SELECT id, user_id
+          FROM chat_sessions
+          WHERE id = ${chatSessionId}
         `;
 
-        if (chatSessionToDelete.length === 0) {
+        if (chatSession.length === 0) {
           response.statusCode = 404;
           response.body = JSON.stringify({ error: "Chat session not found" });
           break;
         }
 
-        // Verify ownership
-        if (chatSessionToDelete[0].user_session_id !== deleteUserSessionId) {
+        if (chatSession[0].user_id !== userId) {
           response.statusCode = 403;
           response.body = JSON.stringify({ error: "You can only delete your own chat sessions" });
           break;
         }
 
-        // Delete interactions first (although FK cascade should handle it)
+        // Delete children first if you DON'T have ON DELETE CASCADE
         await sqlConnection`
-          DELETE FROM user_interactions WHERE chat_session_id = ${deleteChatSessionId}
+          DELETE FROM chat_messages
+          WHERE chat_session_id = ${chatSessionId}
+        `;
+
+        // Optional cleanup (only if you want these removed too)
+        await sqlConnection`
+          DELETE FROM session_feedback
+          WHERE chat_session_id = ${chatSessionId}
+        `;
+
+        await sqlConnection`
+          DELETE FROM analytics_events
+          WHERE chat_session_id = ${chatSessionId}
         `;
 
         // Delete the chat session
         await sqlConnection`
-          DELETE FROM chat_sessions WHERE id = ${deleteChatSessionId}
+          DELETE FROM chat_sessions
+          WHERE id = ${chatSessionId}
         `;
 
-        console.log(`Chat session ${deleteChatSessionId} deleted by user session ${deleteUserSessionId}`);
         response.statusCode = 204;
         response.body = "";
         break;
+      }
+      // DEPRECATED by new /chat_sessions/{chat_session_id} --> will delete later
+      // case "DELETE /chat_sessions/{chat_session_id}":
+      //   const deleteChatSessionId = event.pathParameters?.chat_session_id;
+      //   const deleteUserSessionId = event.queryStringParameters?.user_session_id;
+
+      //   if (!deleteChatSessionId) {
+      //     response.statusCode = 400;
+      //     response.body = JSON.stringify({ error: "chat_session_id is required" });
+      //     break;
+      //   }
+
+      //   if (!deleteUserSessionId) {
+      //     response.statusCode = 400;
+      //     response.body = JSON.stringify({ error: "user_session_id is required" });
+      //     break;
+      //   }
+
+      //   // Verify the chat session exists and belongs to the user
+      //   const chatSessionToDelete = await sqlConnection`
+      //     SELECT id, user_session_id FROM chat_sessions WHERE id = ${deleteChatSessionId}
+      //   `;
+
+      //   if (chatSessionToDelete.length === 0) {
+      //     response.statusCode = 404;
+      //     response.body = JSON.stringify({ error: "Chat session not found" });
+      //     break;
+      //   }
+
+      //   // Verify ownership
+      //   if (chatSessionToDelete[0].user_session_id !== deleteUserSessionId) {
+      //     response.statusCode = 403;
+      //     response.body = JSON.stringify({ error: "You can only delete your own chat sessions" });
+      //     break;
+      //   }
+
+      //   // Delete interactions first (although FK cascade should handle it)
+      //   await sqlConnection`
+      //     DELETE FROM user_interactions WHERE chat_session_id = ${deleteChatSessionId}
+      //   `;
+
+      //   // Delete the chat session
+      //   await sqlConnection`
+      //     DELETE FROM chat_sessions WHERE id = ${deleteChatSessionId}
+      //   `;
+
+      //   console.log(`Chat session ${deleteChatSessionId} deleted by user session ${deleteUserSessionId}`);
+      //   response.statusCode = 204;
+      //   response.body = "";
+      //   break;
 
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
