@@ -12,7 +12,7 @@ const initConnection = async () => {
       });
       const secretResponse = await secretsManager.send(getSecretValueCommand);
       const credentials = JSON.parse(secretResponse.SecretString);
-      
+
       const connectionConfig = {
         host: process.env.RDS_PROXY_ENDPOINT,
         port: credentials.port,
@@ -21,7 +21,7 @@ const initConnection = async () => {
         database: credentials.dbname,
         ssl: { rejectUnauthorized: false },
       };
-      
+
       sqlConnection = postgres(connectionConfig);
       await sqlConnection`SELECT 1`;
       console.log("Database connection initialized successfully");
@@ -59,12 +59,12 @@ const handleError = (error, response) => {
 exports.handler = async (event) => {
   const response = createResponse();
   let data;
-  
+
   try {
     // Ensure connection is initialized before proceeding
     await initConnection();
     const pathData = event.httpMethod + " " + event.resource;
-    
+
     switch (pathData) {
       case "GET /textbooks/{textbook_id}/chat_sessions":
         const chatTextbookId = event.pathParameters?.textbook_id;
@@ -73,16 +73,16 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "Textbook ID is required" });
           break;
         }
-        
+
         const chatPage = parseInt(event.queryStringParameters?.page || '1');
         const chatLimit = Math.min(parseInt(event.queryStringParameters?.limit || '50'), 100);
         const chatOffset = (chatPage - 1) * chatLimit;
-        
+
         const chatTotalResult = await sqlConnection`
           SELECT COUNT(*) as total FROM chat_sessions WHERE textbook_id = ${chatTextbookId}
         `;
         const chatTotal = parseInt(chatTotalResult[0].total);
-        
+
         const chatSessions = await sqlConnection`
           SELECT id, user_session_id, textbook_id, context, created_at, metadata
           FROM chat_sessions
@@ -90,7 +90,7 @@ exports.handler = async (event) => {
           ORDER BY created_at DESC
           LIMIT ${chatLimit} OFFSET ${chatOffset}
         `;
-        
+
         // Backward-compatible shape: include both user_session_id and user_sessions_session_id
         const chatSessionsCompat = chatSessions.map((row) => ({
           ...row,
@@ -108,24 +108,46 @@ exports.handler = async (event) => {
         };
         response.body = JSON.stringify(data);
         break;
-        
+
+      case "GET /chat_sessions/user/{user_id}": {
+        const userId = event.pathParameters?.user_id;
+
+        if (!userId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "user_id is required" });
+          break;
+        }
+
+        // Fetch sessions for this user
+        const sessions = await sqlConnection`
+          SELECT id, user_id, title, created_at, last_active_at, metadata
+          FROM chat_sessions
+          WHERE user_id = ${userId}
+          ORDER BY created_at DESC
+        `;
+
+        data = sessions;
+        response.body = JSON.stringify(data);
+        break;
+      }
+
       case "GET /textbooks/{textbook_id}/chat_sessions/user/{user_session_id}":
         const userChatTextbookId = event.pathParameters?.textbook_id;
         const userSessionId = event.pathParameters?.user_session_id;
-        
+
         if (!userChatTextbookId || !userSessionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Textbook ID and user_session_id are required" });
           break;
         }
-        
+
         const userChatSessions = await sqlConnection`
           SELECT id, user_session_id, textbook_id, context, created_at, metadata, name
           FROM chat_sessions
           WHERE textbook_id = ${userChatTextbookId} AND user_session_id = ${userSessionId}
           ORDER BY created_at DESC
         `;
-        
+
         const userChatSessionsCompat = userChatSessions.map((row) => ({
           ...row,
           user_sessions_session_id: row.user_session_id,
@@ -134,7 +156,7 @@ exports.handler = async (event) => {
         data = userChatSessionsCompat;
         response.body = JSON.stringify(data);
         break;
-        
+
       case "POST /textbooks/{textbook_id}/chat_sessions":
         const postChatTextbookId = event.pathParameters?.textbook_id;
         if (!postChatTextbookId) {
@@ -142,7 +164,7 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "Textbook ID is required" });
           break;
         }
-        
+
         const chatData = parseBody(event.body);
         const { user_sessions_session_id, context } = chatData;
         if (!user_sessions_session_id) {
@@ -150,7 +172,7 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "user_sessions_session_id is required" });
           break;
         }
-        
+
         const textbookExists = await sqlConnection`
           SELECT id FROM textbooks WHERE id = ${postChatTextbookId}
         `;
@@ -159,7 +181,7 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "Textbook not found" });
           break;
         }
-        
+
         const userSessionExists = await sqlConnection`
           SELECT id FROM user_sessions WHERE id = ${user_sessions_session_id}
         `;
@@ -168,46 +190,46 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "Invalid user_sessions_session_id" });
           break;
         }
-        
+
         const newChatSession = await sqlConnection`
           INSERT INTO chat_sessions (user_session_id, textbook_id, context)
           VALUES (${user_sessions_session_id}, ${postChatTextbookId}, ${context || {}})
           RETURNING id, user_session_id, textbook_id, context, created_at, metadata
         `;
-        
+
         response.statusCode = 201;
         data = { ...newChatSession[0], user_sessions_session_id: newChatSession[0].user_session_id };
         response.body = JSON.stringify(data);
         break;
-        
+
       case "GET /chat_sessions/{chat_session_id}/interactions":
         const chatSessionId = event.pathParameters?.chat_session_id;
         const requestingUserSessionId = event.queryStringParameters?.user_session_id;
-        
+
         if (!chatSessionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "chat_session_id is required" });
           break;
         }
-        
+
         // SECURITY: Verify chat session exists and validate ownership
         const chatSessionResult = await sqlConnection`
           SELECT id, textbook_id, user_session_id FROM chat_sessions WHERE id = ${chatSessionId}
         `;
-        
+
         if (chatSessionResult.length === 0) {
           response.statusCode = 404;
           response.body = JSON.stringify({ error: "Chat session not found" });
           break;
         }
-        
+
         // SECURITY: Validate session ownership if user_session_id is provided
         if (requestingUserSessionId) {
           const sessionOwner = chatSessionResult[0].user_session_id;
           if (sessionOwner !== requestingUserSessionId) {
             logger.warn(`Unauthorized access attempt: user_session ${requestingUserSessionId} tried to access chat_session ${chatSessionId} owned by ${sessionOwner}`);
             response.statusCode = 403;
-            response.body = JSON.stringify({ 
+            response.body = JSON.stringify({
               error: "Access denied",
               message: "You do not have permission to access this chat session"
             });
@@ -218,7 +240,7 @@ exports.handler = async (event) => {
           // Log warning if no user_session_id provided (backward compatibility)
           logger.warn(`No user_session_id provided for chat_session ${chatSessionId} - ownership not validated`);
         }
-        
+
         // Fetch all interactions for this chat session
         const interactions = await sqlConnection`
           SELECT id, sender_role, query_text, response_text, source_chunks, created_at, order_index
@@ -226,7 +248,7 @@ exports.handler = async (event) => {
           WHERE chat_session_id = ${chatSessionId}
           ORDER BY order_index ASC, created_at ASC
         `;
-        
+
         data = {
           chat_session_id: chatSessionResult[0].id,
           textbook_id: chatSessionResult[0].textbook_id,
@@ -234,11 +256,11 @@ exports.handler = async (event) => {
         };
         response.body = JSON.stringify(data);
         break;
-        
+
       case "POST /chat_sessions/fork":
         const forkData = parseBody(event.body);
         const { source_chat_session_id, user_session_id, textbook_id } = forkData;
-        
+
         // Validate required parameters
         if (!source_chat_session_id) {
           response.statusCode = 400;
@@ -255,29 +277,29 @@ exports.handler = async (event) => {
           response.body = JSON.stringify({ error: "Missing required parameter: textbook_id" });
           break;
         }
-        
+
         // Verify source chat session exists
         const sourceChatSession = await sqlConnection`
           SELECT id, textbook_id FROM chat_sessions WHERE id = ${source_chat_session_id}
         `;
-        
+
         if (sourceChatSession.length === 0) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Source chat session not found" });
           break;
         }
-        
+
         // Verify user session exists
         const forkUserSessionExists = await sqlConnection`
           SELECT id FROM user_sessions WHERE id = ${user_session_id}
         `;
-        
+
         if (forkUserSessionExists.length === 0) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Invalid user_session_id" });
           break;
         }
-        
+
         // Fetch all interactions from source chat session
         const sourceInteractions = await sqlConnection`
           SELECT sender_role, query_text, response_text, source_chunks, order_index
@@ -285,7 +307,7 @@ exports.handler = async (event) => {
           WHERE chat_session_id = ${source_chat_session_id}
           ORDER BY order_index ASC, created_at ASC
         `;
-        
+
         // Create new chat session and copy interactions in a transaction
         const forkedChatSession = await sqlConnection.begin(async sql => {
           // Create new chat session
@@ -294,7 +316,7 @@ exports.handler = async (event) => {
             VALUES (${user_session_id}, ${textbook_id}, ${{}})
             RETURNING id, user_session_id, textbook_id, context, created_at, metadata
           `;
-          
+
           // Copy interactions if any exist
           if (sourceInteractions.length > 0) {
             const interactionValues = sourceInteractions.map(interaction => ({
@@ -305,15 +327,15 @@ exports.handler = async (event) => {
               source_chunks: interaction.source_chunks,
               order_index: interaction.order_index
             }));
-            
+
             await sql`
               INSERT INTO user_interactions ${sql(interactionValues)}
             `;
           }
-          
+
           return newSession;
         });
-        
+
         response.statusCode = 201;
         data = {
           chat_session_id: forkedChatSession.id,
@@ -324,63 +346,63 @@ exports.handler = async (event) => {
         };
         response.body = JSON.stringify(data);
         break;
-        
+
       case "DELETE /chat_sessions/{chat_session_id}":
         const deleteChatSessionId = event.pathParameters?.chat_session_id;
         const deleteUserSessionId = event.queryStringParameters?.user_session_id;
-        
+
         if (!deleteChatSessionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "chat_session_id is required" });
           break;
         }
-        
+
         if (!deleteUserSessionId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "user_session_id is required" });
           break;
         }
-        
+
         // Verify the chat session exists and belongs to the user
         const chatSessionToDelete = await sqlConnection`
           SELECT id, user_session_id FROM chat_sessions WHERE id = ${deleteChatSessionId}
         `;
-        
+
         if (chatSessionToDelete.length === 0) {
           response.statusCode = 404;
           response.body = JSON.stringify({ error: "Chat session not found" });
           break;
         }
-        
+
         // Verify ownership
         if (chatSessionToDelete[0].user_session_id !== deleteUserSessionId) {
           response.statusCode = 403;
           response.body = JSON.stringify({ error: "You can only delete your own chat sessions" });
           break;
         }
-        
+
         // Delete interactions first (although FK cascade should handle it)
         await sqlConnection`
           DELETE FROM user_interactions WHERE chat_session_id = ${deleteChatSessionId}
         `;
-        
+
         // Delete the chat session
         await sqlConnection`
           DELETE FROM chat_sessions WHERE id = ${deleteChatSessionId}
         `;
-        
+
         console.log(`Chat session ${deleteChatSessionId} deleted by user session ${deleteUserSessionId}`);
         response.statusCode = 204;
         response.body = "";
         break;
-        
+
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }
   } catch (error) {
     handleError(error, response);
   }
-  
+
   console.log(response);
   return response;
 };
