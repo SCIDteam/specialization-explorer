@@ -21,8 +21,12 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
         const tokenResp = await fetch(
           `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
         );
-        if (!tokenResp.ok) return false;
+        if (!tokenResp.ok) {
+          console.error("Failed to get public token");
+          return false;
+        };
         const { token } = await tokenResp.json();
+        console.log("Public token:", token);
 
         // Validate user exists
         const validateResp = await fetch(
@@ -34,10 +38,12 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
             },
           }
         );
+        console.log("Validate user response:", validateResp);
 
         return validateResp.ok;
       } catch (e) {
         console.error("Error validating user:", e);
+        console.log("YOOOOOOOOOO");
         return false;
       }
     };

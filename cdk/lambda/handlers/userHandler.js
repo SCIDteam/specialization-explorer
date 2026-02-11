@@ -127,6 +127,36 @@ exports.handler = async (event) => {
         break;
       }
 
+      case "GET /user/{user_id}": {
+        const userId = event.pathParameters?.user_id;
+        if (!userId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "user_id is required" });
+          break;
+        }
+
+        const user = await sqlConnection`
+          SELECT id, email, display_name, role, created_at, last_seen_at,
+                tokens_used, token_window_started_at, metadata
+          FROM users
+          WHERE id = ${userId}
+        `;
+
+        if (user.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "User not found" });
+          break;
+        }
+
+        // update last_seen_at
+        await sqlConnection`
+          UPDATE users SET last_seen_at = NOW() WHERE id = ${userId}
+        `;
+
+        response.body = JSON.stringify(user[0]);
+        break;
+      }
+
       // DEPRECATED by /user --> will delete later
       case "POST /user_sessions":
         // After schema refactor, user_sessions no longer has a separate session_id column.
@@ -148,6 +178,7 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
 
+      // DEPRECATED by /user/{user_id} --> will delete later
       case "GET /user_sessions/{session_id}":
         const sessionId = event.pathParameters?.session_id;
         if (!sessionId) {

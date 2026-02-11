@@ -2028,6 +2028,38 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /user/{user_id}:
+    <<: *commonOptions
+    get:
+      tags:
+        - User
+      summary: Get user by id
+      operationId: get_user
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User found
+        "404":
+          description: User not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
 # DEPRECATED by /user --> will delete later
   /user_sessions:
     <<: *commonOptions
