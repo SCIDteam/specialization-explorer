@@ -19,7 +19,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
         const { token } = await tokenResponse.json();
 
         const response = await fetch(
-          `${import.meta.env.VITE_API_ENDPOINT}/user_sessions/${sessionUuid}`,
+          `${import.meta.env.VITE_API_ENDPOINT}/user/${sessionUuid}`,
           {
             method: "GET",
             headers: {
