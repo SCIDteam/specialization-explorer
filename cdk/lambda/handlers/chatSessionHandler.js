@@ -131,6 +131,7 @@ exports.handler = async (event) => {
         break;
       }
 
+      // DEPRECATED by /chat_sessions/user/{user_id} --> will delete later
       case "GET /textbooks/{textbook_id}/chat_sessions/user/{user_session_id}":
         const userChatTextbookId = event.pathParameters?.textbook_id;
         const userSessionId = event.pathParameters?.user_session_id;
