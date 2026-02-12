@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet } from "react-router";
+import { Outlet, useNavigate } from "react-router";
 import { ViewProvider } from "@/providers/ViewContext";
 import { SidebarProvider } from "@/providers/SidebarContext";
 import Header from "@/components/Header";
@@ -8,9 +8,11 @@ import SideBar from "@/components/ChatInterface/SideBar";
 import type { ChatSession } from "@/providers/view";
 import { useUser } from "@/providers/user";
 import HomePageHeader from "@/components/HomePageHeader";
+import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   const { userId } = useUser();
+  const navigate = useNavigate();
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(
@@ -34,8 +36,7 @@ export default function HomePage() {
       const { token } = await tokenResponse.json();
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT
-        }/chat_sessions/user/${userId}`,
+        `${import.meta.env.VITE_API_ENDPOINT}/chat_sessions/user/${userId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -51,10 +52,11 @@ export default function HomePage() {
       const sessions: ChatSession[] = await response.json();
       setChatSessions(sessions || []);
 
-      // If no active session is set and we have sessions, set the most recent one
-      if (!activeChatSessionId && sessions.length > 0) {
-        setActiveChatSessionId(sessions[0].id);
-      }
+      // NOTE: We no longer auto-select most recent session.
+      // HomePage should show welcome until the user starts/chooses a chat.
+      // if (!activeChatSessionId && sessions.length > 0) {
+      //   setActiveChatSessionId(sessions[0].id);
+      // }
     } catch (err) {
       console.error("Error fetching chat sessions:", err);
     } finally {
@@ -122,6 +124,14 @@ export default function HomePage() {
     );
   };
 
+  // NEW: Welcome CTA action
+  const handleStartNewConversation = async () => {
+    const session = await createNewChatSession();
+    if (session) {
+      navigate("/chat");
+    }
+  };
+
   // Show loading screen while fetching initial data
   if (isLoadingChatSessions) {
     return (
@@ -157,8 +167,30 @@ export default function HomePage() {
           <div className="pt-[70px] flex flex-1">
             <SideBar />
             <div className="md:ml-64 flex flex-col flex-1">
-              <main className="flex-1 flex flex-col items-center justify-center max-w-screen">
-                <Outlet />
+              <main className="flex-1 flex flex-col items-center justify-center max-w-screen px-4">
+                {/* If no session is active, show welcome screen instead of Outlet */}
+                {!activeChatSessionId ? (
+                  <div className="w-full max-w-2xl text-center">
+                    <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
+                      Welcome to Specialization Explorer!
+                    </h1>
+                    <p className="text-base md:text-lg text-muted-foreground mb-8">
+                      Together we will try to find the right program for you!
+                      <br />
+                      Click below to start a new conversation:
+                    </p>
+
+                    <Button
+                      size="lg"
+                      onClick={handleStartNewConversation}
+                      className="px-8"
+                    >
+                      Start a new conversation
+                    </Button>
+                  </div>
+                ) : (
+                  <Outlet />
+                )}
               </main>
               <Footer />
             </div>
