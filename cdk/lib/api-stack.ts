@@ -1427,7 +1427,7 @@ export class ApiGatewayStack extends cdk.Stack {
     lambdaSystemMessagesFunction.addPermission("AllowAdminApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/systemMessages*`,
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/*`,
     });
 
     const lambdaTextbookFunction = new lambda.Function(
