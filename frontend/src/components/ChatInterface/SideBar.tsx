@@ -28,21 +28,11 @@ import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { useSpeech } from "@/contexts/SpeechContext";
 
-type StudentSideBarProps = {
-  textbookTitle?: string;
-  textbookAuthor?: string;
-  textbookId?: string;
-  textbookSourceUrl?: string;
-};
-
-type SidebarContentProps = StudentSideBarProps & {
+type SidebarContentProps = {
   setMobileOpen: (open: boolean) => void;
 };
 
 function SidebarContent({
-  textbookTitle,
-  textbookAuthor,
-  textbookSourceUrl,
   setMobileOpen,
 }: SidebarContentProps) {
   const navigate = useNavigate();
@@ -75,42 +65,13 @@ function SidebarContent({
 
   return (
     <>
-      {/* App title card */}
-      <Card className="py-[10px] gap-2 mb-4">
-        <CardContent
-          className="line-clamp-2 leading-[1.25] overflow-hidden"
-          style={{ minHeight: `calc(1em * 1.25 * 2)` }}
-        >
-          <h3 className="font-semibold text-sm">{textbookTitle || "Specialization Explorer"}</h3>
-        </CardContent>
-        {textbookAuthor && (
-          <CardContent className="line-clamp-1 leading-[1.25] overflow-hidden">
-            <p className="text-xs text-gray-600">By {textbookAuthor}</p>
-          </CardContent>
-        )}
-      </Card>
-
-      {/* Source URL Link */}
-      {textbookSourceUrl && (
-        <Button
-          variant="outline"
-          size="sm"
-          asChild
-          className="w-full mb-4 gap-2 text-xs text-muted-foreground hover:text-foreground"
-        >
-          <a href={textbookSourceUrl} target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="h-3.5 w-3.5" />
-            View Original Textbook
-          </a>
-        </Button>
-      )}
-
       {/* Menu Items */}
 
       <div className="mb-2">
         <div className="flex items-center justify-between mb-2">
           <h3 className="px-3 text-xs font-semibold text-muted-foreground tracking-wide">
-            STUDY COMPANION
+            {/* TODO: change later */}
+            CHATS
           </h3>
           <Button
             variant="link"
@@ -292,12 +253,7 @@ function SidebarContent({
   );
 }
 
-export default function SideBar({
-  textbookTitle,
-  textbookAuthor,
-  textbookId,
-  textbookSourceUrl,
-}: StudentSideBarProps) {
+export default function SideBar() {
   const { mobileOpen, setMobileOpen } = useSidebar();
 
   return (
@@ -305,10 +261,6 @@ export default function SideBar({
       {/* Desktop sidebar */}
       <aside className="hidden md:block fixed left-0 p-[10px] h-screen w-64 flex-shrink-0 border bg-muted overflow-auto px-4">
         <SidebarContent
-          textbookTitle={textbookTitle}
-          textbookAuthor={textbookAuthor}
-          textbookId={textbookId}
-          textbookSourceUrl={textbookSourceUrl}
           setMobileOpen={setMobileOpen}
         />
       </aside>
@@ -332,10 +284,6 @@ export default function SideBar({
             }`}
         >
           <SidebarContent
-            textbookTitle={textbookTitle}
-            textbookAuthor={textbookAuthor}
-            textbookId={textbookId}
-            textbookSourceUrl={textbookSourceUrl}
             setMobileOpen={setMobileOpen}
           />
         </div>
