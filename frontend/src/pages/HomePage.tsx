@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 
 const DEFAULT_WELCOME_MESSAGE =
   "Together we will try to find the right program for you. Click below to start a new conversation:";
+const DEFAULT_DISCLAIMER = "AI can make mistakes. Check important info.";
 
 export default function HomePage() {
   const { userId } = useUser();
@@ -26,9 +27,14 @@ export default function HomePage() {
     DEFAULT_WELCOME_MESSAGE
   );
   const [isLoadingWelcome, setIsLoadingWelcome] = useState(true);
+  const [disclaimer, setDisclaimer] = useState<string>(DEFAULT_DISCLAIMER);
+  const [isLoadingDisclaimer, setIsLoadingDisclaimer] = useState(true);
 
-  const fetchWelcomeMessage = async () => {
-    setIsLoadingWelcome(true);
+  const fetchSystemMessage = async (
+    messageType: string,
+    fallback: string,
+    setter: (val: string) => void
+  ) => {
     try {
       const tokenResponse = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
@@ -37,7 +43,7 @@ export default function HomePage() {
       const { token } = await tokenResponse.json();
 
       const response = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/welcome_message`,
+        `${import.meta.env.VITE_API_ENDPOINT}/system_message/${messageType}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -46,17 +52,13 @@ export default function HomePage() {
         }
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch welcome message");
-      }
+      if (!response.ok) throw new Error(`Failed to fetch ${messageType}`);
 
       const data: { message?: string } = await response.json();
-      setWelcomeMessage(data.message?.trim() || DEFAULT_WELCOME_MESSAGE);
+      setter(data.message?.trim() || fallback);
     } catch (err) {
-      console.error("Error fetching welcome message:", err);
-      setWelcomeMessage(DEFAULT_WELCOME_MESSAGE);
-    } finally {
-      setIsLoadingWelcome(false);
+      console.error(`Error fetching ${messageType}:`, err);
+      setter(fallback);
     }
   };
 
@@ -99,7 +101,16 @@ export default function HomePage() {
   };
 
   useEffect(() => {
-    fetchWelcomeMessage();
+    setIsLoadingWelcome(true);
+    setIsLoadingDisclaimer(true);
+
+    Promise.all([
+      fetchSystemMessage("welcome_message", DEFAULT_WELCOME_MESSAGE, setWelcomeMessage),
+      fetchSystemMessage("disclaimer", DEFAULT_DISCLAIMER, setDisclaimer),
+    ]).finally(() => {
+      setIsLoadingWelcome(false);
+      setIsLoadingDisclaimer(false);
+    });
     fetchChatSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
@@ -221,6 +232,10 @@ export default function HomePage() {
                     >
                       Start a new conversation
                     </Button>
+
+                    <p className="mt-4 text-xs text-muted-foreground">
+                      {isLoadingDisclaimer ? "" : disclaimer}
+                    </p>
                   </div>
                 ) : (
                   <Outlet />

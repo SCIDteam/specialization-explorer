@@ -1814,18 +1814,35 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /welcome_message:
+  /system_message/{message_type}:
     <<: *commonOptions
     get:
       tags:
         - SystemMessages
-      summary: Get active welcome message
-      operationId: get_welcome_message
+      summary: Get active system message by type
+      operationId: get_system_message_by_type
       security:
         - userAuthorizer: []
+      parameters:
+        - name: message_type
+          in: path
+          required: true
+          description: System message type
+          schema:
+            type: string
+            enum:
+              - disclaimer
+              - guardrails
+              - system_role
+              - system_checklist
+              - system_instructions
+              - initial_prompt
+              - detective_phase_prompt
+              - suggestion_phase_prompt
+              - welcome_message
       responses:
         "200":
-          description: Active welcome message
+          description: Active system message
           content:
             application/json:
               schema:
@@ -1836,9 +1853,6 @@ paths:
                     format: uuid
                   type:
                     type: string
-                    description: System message type
-                    enum:
-                      - welcome_message
                   message:
                     type: string
                   version:
@@ -1846,10 +1860,12 @@ paths:
                   created_at:
                     type: string
                     format: date-time
+        "400":
+          description: Invalid parameters
         "401":
           description: Unauthorized
         "404":
-          description: No active welcome message found
+          description: No active message found for this type
         "500":
           description: Internal Server Error
       x-amazon-apigateway-integration:

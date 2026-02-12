@@ -71,23 +71,54 @@ exports.handler = async (event) => {
         const pathData = event.httpMethod + " " + event.resource;
 
         switch (pathData) {
-            case "GET /welcome_message": {
-                // Fetch the active welcome message (latest version if multiple are mistakenly active)
-                const rows = await sqlConnection`
-                  SELECT id, type, content, version, is_active, created_at
-                  FROM system_messages
-                  WHERE type = 'welcome_message'
-                  AND is_active = true
-                  ORDER BY version DESC, created_at DESC
-                  LIMIT 1
-              `;
-                if (!rows || rows.length === 0) {
-                    response.statusCode = 404;
+            case "GET /system_message/{message_type}": {
+                const messageType = event.pathParameters?.message_type;
+
+                if (!messageType) {
+                    response.statusCode = 400;
+                    response.body = JSON.stringify({ error: "message_type is required" });
+                    break;
+                }
+
+                const allowed = new Set([
+                    "disclaimer",
+                    "guardrails",
+                    "system_role",
+                    "system_checklist",
+                    "system_instructions",
+                    "initial_prompt",
+                    "detective_phase_prompt",
+                    "suggestion_phase_prompt",
+                    "welcome_message",
+                ]);
+
+                if (!allowed.has(messageType)) {
+                    response.statusCode = 400;
                     response.body = JSON.stringify({
-                        error: "No active welcome message found",
+                        error: "Invalid message_type",
+                        allowed: Array.from(allowed),
                     });
                     break;
                 }
+
+                // Fetch active message of this type
+                const rows = await sqlConnection`
+                    SELECT id, type, content, version, is_active, created_at
+                    FROM system_messages
+                    WHERE type = ${messageType}
+                    AND is_active = true
+                    ORDER BY version DESC, created_at DESC
+                    LIMIT 1
+                `;
+
+                if (!rows || rows.length === 0) {
+                    response.statusCode = 404;
+                    response.body = JSON.stringify({
+                        error: `No active message found for type: ${messageType}`,
+                    });
+                    break;
+                }
+
                 const msg = rows[0];
                 response.statusCode = 200;
                 response.body = JSON.stringify({
@@ -99,7 +130,6 @@ exports.handler = async (event) => {
                 });
                 break;
             }
-
             default:
                 throw new Error(`Unsupported route: "${pathData}"`);
         }
