@@ -6,7 +6,7 @@ import { useView } from "@/providers/view";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import type { Message } from "@/types/Chat";
-import { useUserSession } from "@/providers/usersession";
+import { useUser } from "@/providers/user";
 
 export default function AIChatPage() {
   // URL search params for pre-filled questions (from FAQ page)
@@ -29,7 +29,7 @@ export default function AIChatPage() {
     null
   );
 
-  const { sessionUuid } = useUserSession();
+  const { userId } = useUser();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when messages change or when typing starts
@@ -273,8 +273,6 @@ export default function AIChatPage() {
         if (!tokenResponse.ok) throw new Error("Failed to get public token");
         const { token } = await tokenResponse.json();
 
-        const userId = sessionUuid;
-
         const response = await fetch(
           `${import.meta.env.VITE_API_ENDPOINT}/user/${userId}/chat_sessions/${activeChatSessionId}/chat_history`,
           {
@@ -317,7 +315,7 @@ export default function AIChatPage() {
     };
 
     loadChatHistory();
-  }, [activeChatSessionId, sessionUuid]);
+  }, [activeChatSessionId, userId]);
 
   async function sendMessage() {
     let text = message.trim();

@@ -1,19 +1,17 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { UserSessionContext } from "./usersession";
+import { UserContext } from "./user";
 
 
-export function UserSessionProvider({ children }: { children: ReactNode }) {
-  const [userSessionId, setUserSessionId] = useState<string | null>(null);
-  const [sessionUuid, setSessionUuid] = useState<string | null>(null);
+export function UserProvider({ children }: { children: ReactNode }) {
+  const [userId, setUserId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
   const LOCAL_KEY = "specEx_user_session";
 
   useEffect(() => {
     const validateUser = async (stored: {
-      sessionUuid: string;
-      userSessionId: string;
+      userId: string;
       createdAt?: string;
     }) => {
       try {
@@ -26,11 +24,10 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
           return false;
         };
         const { token } = await tokenResp.json();
-        console.log("Public token:", token);
 
         // Validate user exists
         const validateResp = await fetch(
-          `${import.meta.env.VITE_API_ENDPOINT}/user/${stored.sessionUuid}`,
+          `${import.meta.env.VITE_API_ENDPOINT}/user/${stored.userId}`,
           {
             method: "GET",
             headers: {
@@ -38,12 +35,10 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
             },
           }
         );
-        console.log("Validate user response:", validateResp);
 
         return validateResp.ok;
       } catch (e) {
         console.error("Error validating user:", e);
-        console.log("YOOOOOOOOOO");
         return false;
       }
     };
@@ -73,15 +68,13 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
 
         const data = await response.json();
 
-        // Support both "new" and "compat" response shapes
-        const id = data.userId ?? data.sessionId ?? data.userSessionId;
+        const id = data.userId
         if (!id) {
           throw new Error("Create user response missing user id");
         }
 
         const payload = {
-          sessionUuid: id, // keep legacy keys for now
-          userSessionId: id,
+          userId: id,
           createdAt: new Date().toISOString(),
         };
 
@@ -91,8 +84,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
           console.warn("Failed to store user in localStorage");
         }
 
-        setSessionUuid(payload.sessionUuid);
-        setUserSessionId(payload.userSessionId);
+        setUserId(payload.userId);
       } catch (err) {
         setError(err instanceof Error ? err : new Error("Failed to create user"));
       } finally {
@@ -106,8 +98,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
         if (raw) {
           try {
             const parsed = JSON.parse(raw) as {
-              sessionUuid: string;
-              userSessionId: string;
+              userId: string;
               createdAt?: string;
             };
 
@@ -120,8 +111,7 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
             if (!expired) {
               const ok = await validateUser(parsed);
               if (ok) {
-                setSessionUuid(parsed.sessionUuid);
-                setUserSessionId(parsed.userSessionId);
+                setUserId(parsed.userId);
                 setIsLoading(false);
                 return;
               }
@@ -144,8 +134,8 @@ export function UserSessionProvider({ children }: { children: ReactNode }) {
   }, []); // Only run once when the app starts
 
   return (
-    <UserSessionContext.Provider value={{ userSessionId, sessionUuid, isLoading, error }}>
+    <UserContext.Provider value={{ userId, isLoading, error }}>
       {children}
-    </UserSessionContext.Provider>
+    </UserContext.Provider>
   );
 }

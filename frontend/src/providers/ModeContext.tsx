@@ -1,15 +1,15 @@
 import React, { useState, useCallback, useEffect } from "react";
 import ModeContext, { type Mode } from "./mode";
-import { useUserSession } from "../providers/usersession";
+import { useUser } from "./user";
 
 export function ModeProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<Mode>("student");
-  const { sessionUuid } = useUserSession();
+  const { userId } = useUser();
 
   // Fetch the current role from the backend on mount
   useEffect(() => {
     const fetchCurrentRole = async () => {
-      if (!sessionUuid) return;
+      if (!userId) return;
 
       try {
         const tokenResponse = await fetch(
@@ -19,7 +19,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
         const { token } = await tokenResponse.json();
 
         const response = await fetch(
-          `${import.meta.env.VITE_API_ENDPOINT}/user/${sessionUuid}`,
+          `${import.meta.env.VITE_API_ENDPOINT}/user/${userId}`,
           {
             method: "GET",
             headers: {
@@ -40,7 +40,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
     };
 
     fetchCurrentRole();
-  }, [sessionUuid]);
+  }, [userId]);
 
   const setMode = useCallback(
     async (newMode: Mode) => {
@@ -51,7 +51,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
       setModeState(newMode);
 
       // Update the user session role in the backend; rollback on failure
-      if (sessionUuid) {
+      if (userId) {
         try {
           const tokenResponse = await fetch(
             `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
@@ -67,7 +67,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
           const { token } = await tokenResponse.json();
 
           const response = await fetch(
-            `${import.meta.env.VITE_API_ENDPOINT}/user_sessions/${sessionUuid}`,
+            `${import.meta.env.VITE_API_ENDPOINT}/user/${userId}`,
             {
               method: "PUT",
               headers: {
@@ -92,7 +92,7 @@ export function ModeProvider({ children }: { children: React.ReactNode }) {
         }
       }
     },
-    [sessionUuid, mode]
+    [userId, mode]
   );
 
   return (

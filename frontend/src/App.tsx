@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router";
 import AIChatPage from "./pages/ChatInterface/ChatInterface";
 import UserGuidelines from "./pages/UserGuidelines";
-import { UserSessionProvider } from "./providers/UserSessionContext";
+import { UserProvider } from "./providers/UserContext";
 import { ModeProvider } from "@/providers/ModeContext";
 import HomePage from "./pages/HomePage";
 import AdminLogin from "./pages/Admin/AdminLogin";
@@ -66,7 +66,7 @@ warmupLambdas();
 function App() {
   return (
     <BrowserRouter>
-      <UserSessionProvider>
+      <UserProvider>
         <ModeProvider>
           <Routes>
             <Route path="/" element={<HomePage />}>
@@ -94,7 +94,7 @@ function App() {
             />
           </Routes>
         </ModeProvider>
-      </UserSessionProvider>
+      </UserProvider>
     </BrowserRouter>
   );
 }

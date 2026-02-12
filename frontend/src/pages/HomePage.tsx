@@ -6,11 +6,11 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SideBar from "@/components/ChatInterface/SideBar";
 import type { ChatSession } from "@/providers/view";
-import { useUserSession } from "@/providers/usersession";
+import { useUser } from "@/providers/user";
 import HomePageHeader from "@/components/HomePageHeader";
 
 export default function HomePage() {
-  const { userSessionId } = useUserSession();
+  const { userId } = useUser();
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(
@@ -20,7 +20,7 @@ export default function HomePage() {
 
   // Fetch chat sessions for the user
   const fetchChatSessions = async () => {
-    if (!userSessionId) {
+    if (!userId) {
       setIsLoadingChatSessions(false);
       return;
     }
@@ -35,7 +35,7 @@ export default function HomePage() {
 
       const response = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT
-        }/chat_sessions/user/${userSessionId}`,
+        }/chat_sessions/user/${userId}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -65,11 +65,11 @@ export default function HomePage() {
   useEffect(() => {
     fetchChatSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userSessionId]);
+  }, [userId]);
 
   // Create a new chat session
   const createNewChatSession = async (): Promise<ChatSession | null> => {
-    if (!userSessionId) return null;
+    if (!userId) return null;
 
     try {
       const tokenResponse = await fetch(
@@ -87,7 +87,7 @@ export default function HomePage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            user_sessions_session_id: userSessionId,
+            user_sessions_session_id: userId,
           }),
         }
       );
