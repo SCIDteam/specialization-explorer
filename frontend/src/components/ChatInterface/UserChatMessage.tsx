@@ -13,28 +13,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useEffect, useState } from "react";
-import { useUserSession } from "@/providers/usersession";
-import { useMode } from "@/providers/mode";
 
 // Props for saving a user's message as a shared prompt
 type UserChatMessageProps = {
   text: string;
-  textbookId: string; // textbook to associate the prompt with
-  onSaveSuccess?: (promptId: string) => void; // optional callback on success
   onSaveError?: (error: Error) => void; // optional callback on error
   messageTime?: number;
   initialLoadTime?: number | null;
   id?: string;
 };
 
-export default function UserChatMessage({ text, textbookId, onSaveSuccess, onSaveError, messageTime, initialLoadTime, id }: UserChatMessageProps) {
+export default function UserChatMessage({ text, onSaveError, messageTime, initialLoadTime, id }: UserChatMessageProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [prompt, setPrompt] = useState(text);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const { sessionUuid } = useUserSession();
-  const { mode } = useMode();
   const { settings, speak, cancel, isSpeaking, currentUtteranceId } = useSpeech();
   const isPlaying = isSpeaking && currentUtteranceId === id;
 
@@ -59,48 +53,11 @@ export default function UserChatMessage({ text, textbookId, onSaveSuccess, onSav
 
   async function handleSubmit() {
     setErrorMsg(null);
-    if (!textbookId) {
-      setErrorMsg("Missing textbookId");
-      return;
-    }
 
     try {
       setIsSaving(true);
-      // Acquire public token
-      const tokenResp = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`);
-      if (!tokenResp.ok) throw new Error("Failed to get public token");
-      const { token } = await tokenResp.json();
-
-      // Create shared prompt
-      const createResp = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/textbooks/${textbookId}/shared_prompts`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            title: name || null,
-            prompt_text: prompt,
-            owner_session_id: sessionUuid || null,
-            role: mode,
-            visibility: "public",
-            tags: [],
-            metadata: {},
-          }),
-        }
-      );
-
-      if (!createResp.ok) {
-        const errText = await createResp.text();
-        throw new Error(errText || "Failed to save prompt");
-      }
-
-      const data = await createResp.json();
       // Close dialog and notify
       setOpen(false);
-      onSaveSuccess?.(data.id);
     } catch (err) {
       const e = err instanceof Error ? err : new Error("Unknown error");
       setErrorMsg(e.message);
@@ -124,7 +81,7 @@ export default function UserChatMessage({ text, textbookId, onSaveSuccess, onSav
       <div className="flex justify-end">
         <button
           className="text-muted-foreground hover:text-foreground p-1 mr-2"
-            onClick={() => {
+          onClick={() => {
             if (isPlaying) cancel();
             else speak(text, { enabled: true, id });
           }}

@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 import { Outlet } from "react-router";
-import { TextbookViewProvider } from "@/providers/TextbookViewContext";
+import { ViewProvider } from "@/providers/ViewContext";
 import { SidebarProvider } from "@/providers/SidebarContext";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import SideBar from "@/components/ChatInterface/SideBar";
-import type { ChatSession } from "@/providers/textbookView";
+import type { ChatSession } from "@/providers/view";
 import { useUserSession } from "@/providers/usersession";
 import HomePageHeader from "@/components/HomePageHeader";
 
@@ -138,9 +138,8 @@ export default function HomePage() {
   }
 
   return (
-    <TextbookViewProvider
+    <ViewProvider
       value={{
-        textbook: null,
         loading: false,
         error: null,
         chatSessions,
@@ -166,6 +165,6 @@ export default function HomePage() {
           </div>
         </div>
       </SidebarProvider>
-    </TextbookViewProvider>
+    </ViewProvider>
   );
 }

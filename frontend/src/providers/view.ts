@@ -1,18 +1,15 @@
 import { createContext, useContext } from "react";
-import type { Textbook } from "@/types/Textbook";
 
 export type ChatSession = {
   id: string;
   name: string;
   user_id: string;
-  textbook_id: string;
   context?: unknown;
   created_at: string;
   metadata?: unknown;
 };
 
-export type TextbookViewContextType = {
-  textbook: Textbook | null;
+export type ViewContextType = {
   loading: boolean;
   error: Error | null;
 
@@ -26,14 +23,14 @@ export type TextbookViewContextType = {
   updateChatSessionName: (sessionId: string, name: string) => void;
 };
 
-export const TextbookViewContext = createContext<
-  TextbookViewContextType | undefined
+export const ViewContext = createContext<
+  ViewContextType | undefined
 >(undefined);
 
-export function useTextbookView() {
-  const context = useContext(TextbookViewContext);
+export function useView() {
+  const context = useContext(ViewContext);
   if (!context) {
-    throw new Error("useTextbookView must be used within TextbookViewProvider");
+    throw new Error("useView must be used within ViewProvider");
   }
   return context;
 }

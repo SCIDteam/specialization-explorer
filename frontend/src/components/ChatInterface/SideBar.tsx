@@ -13,7 +13,7 @@ import { useSidebar } from "@/providers/sidebar";
 import { useNavigate } from "react-router";
 import { Separator } from "@/components/ui/separator";
 import { useMode } from "@/providers/mode";
-import { useTextbookView } from "@/providers/textbookView";
+import { useView } from "@/providers/view";
 import { Plus, MessageSquare, ExternalLink, Volume2, ChevronRight } from "lucide-react";
 import DeleteChatButton from "./DeleteChatButton";
 import {
@@ -53,7 +53,7 @@ function SidebarContent({
     setActiveChatSessionId,
     createNewChatSession,
     refreshChatSessions,
-  } = useTextbookView();
+  } = useView();
   const { settings, setSettings, voices, speak, cancel } = useSpeech();
   const [audioOpen, setAudioOpen] = useState(false);
 

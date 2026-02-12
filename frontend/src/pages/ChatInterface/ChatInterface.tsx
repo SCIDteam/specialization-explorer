@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useSearchParams } from "react-router";
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
-import { useTextbookView } from "@/providers/textbookView";
+import { useView } from "@/providers/view";
 import { AiChatInput } from "@/components/ChatInterface/userInput";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import type { Message } from "@/types/Chat";
@@ -20,10 +20,9 @@ export default function AIChatPage() {
   >(null);
 
   const {
-    textbook,
     activeChatSessionId,
     updateChatSessionName,
-  } = useTextbookView();
+  } = useView();
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingMessageId, setStreamingMessageId] = useState<string | null>(
@@ -32,8 +31,6 @@ export default function AIChatPage() {
 
   const { sessionUuid } = useUserSession();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  const textbookTitle = textbook?.title ?? "Calculus: Volume 3";
 
   // Auto-scroll to bottom when messages change or when typing starts
   const scrollToBottom = useCallback(() => {
@@ -324,7 +321,7 @@ export default function AIChatPage() {
 
   async function sendMessage() {
     let text = message.trim();
-    if (!text || !textbook) return;
+    if (!text) return;
 
     // Ensure we have an active chat session
     if (!activeChatSessionId) return;
@@ -356,13 +353,11 @@ export default function AIChatPage() {
     if (isConnected && webSocketUrl) {
       console.log("[WebSocket] Sending message via WebSocket:", {
         action: "generate_text",
-        textbook_id: textbook.id,
         query: text,
         chat_session_id: activeChatSessionId,
       });
       const success = sendWebSocketMessage({
         action: "generate_text",
-        textbook_id: textbook.id,
         query: text,
         chat_session_id: activeChatSessionId,
       });
@@ -409,7 +404,6 @@ export default function AIChatPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            textbook_id: textbook.id,
             query: text,
           }),
         }
@@ -468,7 +462,6 @@ export default function AIChatPage() {
     if (
       question &&
       activeChatSessionId &&
-      textbook &&
       !isStreaming &&
       !isLoadingHistory
     ) {
@@ -507,7 +500,6 @@ export default function AIChatPage() {
   }, [
     searchParams,
     activeChatSessionId,
-    textbook,
     isStreaming,
     isLoadingHistory,
   ]);
@@ -518,7 +510,6 @@ export default function AIChatPage() {
         <UserChatMessage
           key={message.id}
           text={message.text}
-          textbookId={textbook?.id || ""}
           messageTime={message.time}
           initialLoadTime={initialMessageLoadTime}
           id={message.id}
@@ -588,7 +579,7 @@ export default function AIChatPage() {
               <AiChatInput
                 value={message}
                 onChange={(val: string) => setMessage(val)}
-                placeholder={`Ask anything about ${textbookTitle}`}
+                placeholder={"TODO: need to change placeholder value later"}
                 onSend={sendMessage}
               />
             </div>
