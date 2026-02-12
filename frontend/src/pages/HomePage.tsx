@@ -49,7 +49,6 @@ export default function HomePage() {
       }
 
       const sessions: ChatSession[] = await response.json();
-      console.log("Fetched chat sessions:", sessions);
       setChatSessions(sessions || []);
 
       // If no active session is set and we have sessions, set the most recent one

@@ -32,30 +32,15 @@ async function warmupLambdas() {
   const apiEndpoint = import.meta.env.VITE_API_ENDPOINT;
   const wsUrl = import.meta.env.VITE_WEBSOCKET_URL;
 
-  console.log("we in here");
-
-  if (!apiEndpoint || !wsUrl) {
-    if (!apiEndpoint) console.log("No API endpoint");
-    if (!wsUrl) console.log("No WebSocket URL");
-    console.log("lmao")
-    return
-  };
+  if (!apiEndpoint || !wsUrl) return;
 
   try {
     // Get authentication token
     const tokenResponse = await fetch(`${apiEndpoint}/user/publicToken`);
-    if (!tokenResponse.ok) {
-      console.error("Failed to get public token");
-      return
-    };
+    if (!tokenResponse.ok) return;
 
     const { token } = await tokenResponse.json();
-    if (!token) {
-      console.error("Failed to get public token 1");
-      return
-    };
-
-    console.log("Public token:", token);
+    if (!token) return;
 
     // Connect to WebSocket and send warmup action
     const ws = new WebSocket(`${wsUrl}?token=${token}`);
@@ -75,7 +60,6 @@ async function warmupLambdas() {
 }
 
 // Call warmup once when module loads
-console.log("Warmup Lambdas");
 warmupLambdas();
 
 

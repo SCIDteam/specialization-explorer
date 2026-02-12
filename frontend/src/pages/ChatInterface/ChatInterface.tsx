@@ -432,14 +432,7 @@ export default function AIChatPage() {
         if (!tokenResponse.ok) throw new Error("Failed to get public token");
         const { token } = await tokenResponse.json();
 
-        console.log("A");
-
         const userId = sessionUuid;
-
-        console.log("B");
-        console.log("token", token)
-        console.log("userId", userId);
-        console.log("activeChatSessionId", activeChatSessionId);
 
         const response = await fetch(
           `${import.meta.env.VITE_API_ENDPOINT}/user/${userId}/chat_sessions/${activeChatSessionId}/chat_history`,
@@ -450,11 +443,7 @@ export default function AIChatPage() {
           }
         );
 
-        console.log("C");
-        console.log("response", response);
-
         if (!response.ok) throw new Error("Failed to load chat history");
-        console.log("D");
 
         interface ChatMessageRow {
           id: string;
