@@ -1,7 +1,5 @@
 import { useState, useEffect } from "react";
 import DOMPurify from "dompurify";
-import HomePageHeader from "@/components/HomePageHeader";
-import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 // Simple markdown to HTML converter for basic formatting
@@ -81,7 +79,7 @@ export default function UserGuidelines() {
         const response = await fetch(
           `${import.meta.env.VITE_API_ENDPOINT}/public/config/userGuidelines`
         );
-        
+
         if (response.ok) {
           const data = await response.json();
           if (data.userGuidelines && data.userGuidelines.trim() !== "") {
@@ -114,7 +112,6 @@ export default function UserGuidelines() {
 
   return (
     <div className="pt-[70px] flex min-h-screen flex-col bg-background">
-      <HomePageHeader />
 
       {/* Main Content */}
       <main className="container mx-auto flex-1 px-6 py-16">
@@ -140,7 +137,7 @@ export default function UserGuidelines() {
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
                 </div>
               ) : (
-                <div 
+                <div
                   className="space-y-4 text-base leading-relaxed"
                   dangerouslySetInnerHTML={{ __html: renderedContent }}
                 />
@@ -149,7 +146,6 @@ export default function UserGuidelines() {
           </Card>
         </div>
       </main>
-      <Footer />
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route } from "react-router";
+import AppLayout from "./layouts/AppLayout";
 import AIChatPage from "./pages/ChatInterface/ChatInterface";
 import UserGuidelines from "./pages/UserGuidelines";
 import { UserProvider } from "./providers/UserContext";
-import { ModeProvider } from "@/providers/ModeContext";
 import HomePage from "./pages/HomePage";
 import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
@@ -67,11 +67,12 @@ function App() {
   return (
     <BrowserRouter>
       <UserProvider>
-        <ModeProvider>
-          <Routes>
+        <Routes>
+          <Route element={<AppLayout />}>
             <Route path="/" element={<HomePage />}>
               <Route path="chat" element={<AIChatPage />} />
             </Route>
+
             <Route path="/guidelines" element={<UserGuidelines />} />
 
             {/* Admin Routes */}
@@ -92,8 +93,8 @@ function App() {
                 </ProtectedRoute>
               }
             />
-          </Routes>
-        </ModeProvider>
+          </Route>
+        </Routes>
       </UserProvider>
     </BrowserRouter>
   );

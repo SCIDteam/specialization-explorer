@@ -11,7 +11,6 @@ import {
 import { useSidebar } from "@/providers/sidebar";
 import { useNavigate } from "react-router";
 import { Separator } from "@/components/ui/separator";
-import { useMode } from "@/providers/mode";
 import { useView } from "@/providers/view";
 import { Plus, MessageSquare, Volume2, ChevronRight } from "lucide-react";
 import DeleteChatButton from "./DeleteChatButton";
@@ -35,7 +34,6 @@ function SidebarContent({
   setMobileOpen,
 }: SidebarContentProps) {
   const navigate = useNavigate();
-  const { mode } = useMode();
   const {
     chatSessions,
     activeChatSessionId,
@@ -237,17 +235,6 @@ function SidebarContent({
         </div>
       </div>
       <Separator className="mb-4" />
-      {mode === "student" ? (
-        // student view content - placeholder for future navigation
-        <nav className="space-y-2 mb-4">
-          {/* Future navigation items can be added here */}
-        </nav>
-      ) : (
-        // instructor view content - placeholder for future navigation
-        <nav className="space-y-2 mb-4">
-          {/* Future navigation items can be added here */}
-        </nav>
-      )}
     </>
   );
 }

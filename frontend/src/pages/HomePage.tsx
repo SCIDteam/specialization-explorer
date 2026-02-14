@@ -2,12 +2,9 @@ import { useState, useEffect } from "react";
 import { Outlet, useNavigate } from "react-router";
 import { ViewProvider } from "@/providers/ViewContext";
 import { SidebarProvider } from "@/providers/SidebarContext";
-import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 import SideBar from "@/components/ChatInterface/SideBar";
 import type { ChatSession } from "@/providers/view";
 import { useUser } from "@/providers/user";
-import HomePageHeader from "@/components/HomePageHeader";
 import { Button } from "@/components/ui/button";
 
 const DEFAULT_WELCOME_MESSAGE =
@@ -182,7 +179,6 @@ export default function HomePage() {
   if (isLoadingChatSessions) {
     return (
       <div className="flex flex-col min-h-screen bg-background">
-        <HomePageHeader />
         <div className="pt-[70px] flex-1 flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
@@ -209,40 +205,36 @@ export default function HomePage() {
     >
       <SidebarProvider>
         <div className="flex flex-col min-h-screen bg-background">
-          <Header />
-          <div className="pt-[70px] flex flex-1">
-            <SideBar />
-            <div className="md:ml-64 flex flex-col flex-1">
-              <main className="flex-1 flex flex-col items-center justify-center max-w-screen px-4">
-                {!activeChatSessionId ? (
-                  <div className="w-full max-w-2xl text-center">
-                    <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
-                      Welcome to Specialization Explorer!
-                    </h1>
+          <SideBar />
+          <div className="md:ml-64 flex flex-col flex-1">
+            <main className="flex-1 flex flex-col items-center justify-center max-w-screen px-4">
+              {!activeChatSessionId ? (
+                <div className="w-full max-w-2xl text-center">
+                  <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
+                    Welcome to Specialization Explorer!
+                  </h1>
 
-                    <p className="text-base md:text-lg text-muted-foreground mb-8 whitespace-pre-line">
-                      {isLoadingWelcome ? "Loading..." : welcomeMessage}
-                    </p>
+                  <p className="text-base md:text-lg text-muted-foreground mb-8 whitespace-pre-line">
+                    {isLoadingWelcome ? "Loading..." : welcomeMessage}
+                  </p>
 
-                    <Button
-                      size="lg"
-                      onClick={handleStartNewConversation}
-                      className="px-8"
-                      disabled={isLoadingWelcome}
-                    >
-                      Start a new conversation
-                    </Button>
+                  <Button
+                    size="lg"
+                    onClick={handleStartNewConversation}
+                    className="px-8"
+                    disabled={isLoadingWelcome}
+                  >
+                    Start a new conversation
+                  </Button>
 
-                    <p className="mt-4 text-xs text-muted-foreground">
-                      {isLoadingDisclaimer ? "" : disclaimer}
-                    </p>
-                  </div>
-                ) : (
-                  <Outlet />
-                )}
-              </main>
-              <Footer />
-            </div>
+                  <p className="mt-4 text-xs text-muted-foreground">
+                    {isLoadingDisclaimer ? "" : disclaimer}
+                  </p>
+                </div>
+              ) : (
+                <Outlet />
+              )}
+            </main>
           </div>
         </div>
       </SidebarProvider>
