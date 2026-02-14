@@ -13,6 +13,7 @@ import {
 import { confirmSignIn } from "aws-amplify/auth";
 import { Eye, EyeOff } from "lucide-react";
 import { AuthService } from "@/functions/authService";
+import Footer from "@/components/Footer";
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -236,6 +237,7 @@ export default function AdminLogin() {
           </CardContent>
         </Card>
       </div>
+      <Footer />
     </div>
   );
 }

@@ -1,6 +1,5 @@
 import { Outlet } from "react-router";
 import Header from "@/components/Header";
-import Footer from "@/components/Footer";
 import { SidebarProvider } from "@/providers/SidebarContext";
 
 export default function AppLayout() {
@@ -11,7 +10,6 @@ export default function AppLayout() {
                 <div className="pt-[70px] flex-1">
                     <Outlet />
                 </div>
-                <Footer />
             </div>
         </SidebarProvider>
     );

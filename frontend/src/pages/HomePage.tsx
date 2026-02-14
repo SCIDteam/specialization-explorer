@@ -3,6 +3,7 @@ import { Outlet, useNavigate } from "react-router";
 import { ViewProvider } from "@/providers/ViewContext";
 import { SidebarProvider } from "@/providers/SidebarContext";
 import SideBar from "@/components/ChatInterface/SideBar";
+import Footer from "@/components/Footer";
 import type { ChatSession } from "@/providers/view";
 import { useUser } from "@/providers/user";
 import { Button } from "@/components/ui/button";
@@ -235,6 +236,7 @@ export default function HomePage() {
                 <Outlet />
               )}
             </main>
+            <Footer />
           </div>
         </div>
       </SidebarProvider>
