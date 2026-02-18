@@ -556,9 +556,8 @@ paths:
   /admin/analytics:
     <<: *commonOptions
     get:
-      tags:
-        - Admin
-      summary: Get analytics data
+      tags: [Admin]
+      summary: Get analytics time series
       operationId: get_admin_analytics
       security:
         - adminAuthorizer: []
@@ -566,14 +565,13 @@ paths:
         - name: timeRange
           in: query
           required: false
-          description: Time range for analytics data
+          description: Time range for analytics data (e.g., 7d, 30d, 90d, 6m, 1y)
           schema:
             type: string
-            enum: ["7d", "30d", "3m"]
-            default: "3m"
+            default: "90d"
       responses:
         "200":
-          description: Analytics data including time series and textbook statistics
+          description: Analytics time series
           content:
             application/json:
               schema:
@@ -584,34 +582,16 @@ paths:
                     items:
                       type: object
                       properties:
-                        date:
-                          type: string
-                          description: Formatted date (e.g., "Jan 15")
-                        users:
-                          type: integer
-                          description: Number of unique users on this date
-                        questions:
-                          type: integer
-                          description: Number of questions asked on this date
-                  chatSessionsByTextbook:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        name:
-                          type: string
-                          description: Textbook title
-                        sessions:
-                          type: integer
-                          description: Number of chat sessions for this textbook
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
+                        date: { type: string }
+                        users: { type: integer }
+                        questions: { type: integer }
+                        chat_sessions: { type: integer }
+        "401": { description: Unauthorized }
+        "500": { description: Internal Server Error }
       x-amazon-apigateway-integration:
         uri:
           Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
+        passthroughBehavior: when_no_match
         httpMethod: POST
         type: aws_proxy
 
@@ -997,6 +977,7 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  # DEPRECATED since no longer needed in new project --> will delete later
   /admin/analytics/practice:
     <<: *commonOptions
     get:

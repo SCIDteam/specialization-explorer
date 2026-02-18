@@ -654,7 +654,8 @@ exports.handler = async (event) => {
           },
         });
         break;
-
+      
+      // DEPRECATED since no longer needed in new project --> will delete later
       // GET /admin/analytics/practice - Get aggregated practice material analytics
       case "GET /admin/analytics/practice":
         // Get total count
@@ -1172,140 +1173,67 @@ exports.handler = async (event) => {
         break;
 
       // GET /admin/analytics - Get analytics data
-      case "GET /admin/analytics":
-        let startDate, endDate;
+      case "GET /admin/analytics": {
+        const timeRange = event.queryStringParameters?.timeRange || "90d";
 
-        // Support custom date ranges
-        if (
-          event.queryStringParameters?.startDate &&
-          event.queryStringParameters?.endDate
-        ) {
-          // Use custom date range
-          startDate = new Date(event.queryStringParameters.startDate);
-          endDate = new Date(event.queryStringParameters.endDate);
-
-          // Validate dates
-          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
-            response.statusCode = 400;
-            response.body = JSON.stringify({
-              error: "Invalid date format. Use ISO 8601 format (YYYY-MM-DD)",
-            });
-            break;
-          }
-
-          if (endDate < startDate) {
-            response.statusCode = 400;
-            response.body = JSON.stringify({
-              error: "End date must be after start date",
-            });
-            break;
-          }
-
-          // Validate max 1 year range
-          const daysDiff = Math.ceil(
-            (endDate - startDate) / (1000 * 60 * 60 * 24)
-          );
-          if (daysDiff > 365) {
-            response.statusCode = 400;
-            response.body = JSON.stringify({
-              error: "Date range cannot exceed 1 year (365 days)",
-            });
-            break;
-          }
-
-          console.log(
-            `Using custom date range: ${startDate.toISOString()} to ${endDate.toISOString()}`
-          );
-        } else {
-          // Use preset timeRange
-          const timeRange = event.queryStringParameters?.timeRange || "3m";
-          let daysBack = 90; // default 3 months
-
-          // Parse timeRange format (e.g., "30d", "6m", "1y")
-          const timeRangeMatch = timeRange.match(/^(\d+)([dmy])$/);
-          if (timeRangeMatch) {
-            const value = parseInt(timeRangeMatch[1], 10);
-            const unit = timeRangeMatch[2];
-
-            if (unit === "d") {
-              daysBack = value;
-            } else if (unit === "m") {
-              daysBack = value * 30;
-            } else if (unit === "y") {
-              daysBack = value * 365;
-            }
-          }
-
-          // Cap at 365 days and ensure at least 1 day
-          daysBack = Math.min(Math.max(1, daysBack), 365);
-
-          endDate = new Date();
-          startDate = new Date();
-          startDate.setDate(startDate.getDate() - daysBack);
-
-          console.log(
-            `Using preset time range: ${timeRange} (${daysBack} days)`
-          );
+        // Parse "90d" (cap 365)
+        let daysBack = 90;
+        const m = String(timeRange).match(/^(\d+)([dmy])$/);
+        if (m) {
+          const value = parseInt(m[1], 10);
+          const unit = m[2];
+          if (unit === "d") daysBack = value;
+          if (unit === "m") daysBack = value * 30;
+          if (unit === "y") daysBack = value * 365;
         }
+        daysBack = Math.min(Math.max(1, daysBack), 365);
 
-        // Get time series data for users and questions
-        const timeSeriesData = await sqlConnection`
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - daysBack);
+
+        const timeSeries = await sqlConnection`
           WITH date_series AS (
             SELECT generate_series(
               DATE_TRUNC('day', ${startDate.toISOString()}::timestamp),
-              DATE_TRUNC('day', ${endDate.toISOString()}::timestamp),
+              DATE_TRUNC('day', NOW()),
               '1 day'::interval
             )::date AS date
           ),
-          daily_users AS (
-            SELECT 
-              DATE_TRUNC('day', us.created_at)::date AS date,
-              COUNT(DISTINCT us.id) AS count
-            FROM user_sessions us
-            WHERE us.created_at >= ${startDate.toISOString()}
-            GROUP BY DATE_TRUNC('day', us.created_at)::date
+          daily_chat_sessions AS (
+            SELECT
+              DATE_TRUNC('day', cs.created_at)::date AS date,
+              COUNT(cs.id)::int AS chat_sessions,
+              COUNT(DISTINCT cs.user_id)::int AS session_users
+            FROM chat_sessions cs
+            WHERE cs.created_at >= ${startDate.toISOString()}
+            GROUP BY DATE_TRUNC('day', cs.created_at)::date
           ),
           daily_questions AS (
-            SELECT 
-              DATE_TRUNC('day', ui.created_at)::date AS date,
-              COUNT(ui.id) AS count
-            FROM user_interactions ui
-            WHERE ui.created_at >= ${startDate.toISOString()}
-            GROUP BY DATE_TRUNC('day', ui.created_at)::date
+            SELECT
+              DATE_TRUNC('day', cm.created_at)::date AS date,
+              COUNT(cm.id)::int AS questions,
+              COUNT(DISTINCT cs.user_id)::int AS question_users
+            FROM chat_messages cm
+            JOIN chat_sessions cs ON cs.id = cm.chat_session_id
+            WHERE cm.created_at >= ${startDate.toISOString()}
+              AND cm.sender = 'user'
+            GROUP BY DATE_TRUNC('day', cm.created_at)::date
           )
-          SELECT 
+          SELECT
             TO_CHAR(ds.date, 'Mon DD') AS date,
-            COALESCE(du.count, 0) AS users,
-            COALESCE(dq.count, 0) AS questions
+            COALESCE(GREATEST(dcs.session_users, dq.question_users), 0)::int AS users,
+            COALESCE(dq.questions, 0)::int AS questions,
+            COALESCE(dcs.chat_sessions, 0)::int AS chat_sessions
           FROM date_series ds
-          LEFT JOIN daily_users du ON ds.date = du.date
+          LEFT JOIN daily_chat_sessions dcs ON ds.date = dcs.date
           LEFT JOIN daily_questions dq ON ds.date = dq.date
           ORDER BY ds.date ASC
         `;
 
-        // Get chat sessions per textbook
-        const chatSessionsByTextbook = await sqlConnection`
-          SELECT 
-            t.id,
-            t.title,
-            COUNT(DISTINCT cs.id) AS session_count
-          FROM textbooks t
-          LEFT JOIN chat_sessions cs ON t.id = cs.textbook_id
-          WHERE t.status = 'Active'
-          GROUP BY t.id, t.title
-          ORDER BY session_count DESC
-          LIMIT 10
-        `;
-
         response.statusCode = 200;
-        response.body = JSON.stringify({
-          timeSeries: timeSeriesData,
-          chatSessionsByTextbook: chatSessionsByTextbook.map((row) => ({
-            name: row.title,
-            sessions: parseInt(row.session_count),
-          })),
-        });
+        response.body = JSON.stringify({ timeSeries });
         break;
+      }
 
       // GET /admin/settings/token-limit - Get daily token limit
       case "GET /admin/settings/token-limit":

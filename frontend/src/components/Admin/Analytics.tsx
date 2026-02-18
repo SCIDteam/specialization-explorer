@@ -10,37 +10,23 @@ import {
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Cell,
 } from "recharts";
 import { AuthService } from "@/functions/authService";
 
 type TimeSeriesData = {
   date: string;
   users: number;
+  chat_sessions: number;
   questions: number;
-};
-
-type ChatSessionData = {
-  name: string;
-  sessions: number;
-};
-
-type PracticeAnalyticsData = {
-  total_generated: number;
-  by_type: { material_type: string; count: number }[];
 };
 
 type AnalyticsData = {
   timeSeries: TimeSeriesData[];
-  chatSessionsByTextbook: ChatSessionData[];
-  practiceAnalytics: PracticeAnalyticsData | null;
 };
 
 type ChartCardProps = {
@@ -91,8 +77,6 @@ export default function Analytics() {
   const [timeRange, setTimeRange] = useState("90d");
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData>({
     timeSeries: [],
-    chatSessionsByTextbook: [],
-    practiceAnalytics: null,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -109,55 +93,25 @@ export default function Analytics() {
       const session = await AuthService.getAuthSession(true);
       const token = session.tokens.idToken;
 
-      // Build analytics URL with timeRange parameter
-      let analyticsUrl = `${import.meta.env.VITE_API_ENDPOINT}/admin/analytics?timeRange=${timeRange}`;
+      const analyticsUrl = `${import.meta.env.VITE_API_ENDPOINT}/admin/analytics?timeRange=${timeRange}`;
 
-      const [generalResponse, practiceResponse] = await Promise.all([
-        fetch(analyticsUrl, {
-          headers: {
-            Authorization: token,
-            "Content-Type": "application/json",
-          },
-        }),
-        fetch(`${import.meta.env.VITE_API_ENDPOINT}/admin/analytics/practice`, {
-          headers: {
-            Authorization: token,
-            "Content-Type": "application/json",
-          },
-        }),
-      ]);
-
-      if (!generalResponse.ok || !practiceResponse.ok) {
-        throw new Error("Failed to fetch analytics data");
-      }
-
-      const generalData = await generalResponse.json();
-      const practiceData = await practiceResponse.json();
-
-      setAnalyticsData({
-        ...generalData,
-        practiceAnalytics: practiceData,
+      const res = await fetch(analyticsUrl, {
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
       });
+
+      if (!res.ok) throw new Error("Failed to fetch analytics data");
+
+      const data = await res.json();
+      setAnalyticsData(data);
     } catch (err) {
       console.error("Error fetching analytics:", err);
       setError("Failed to load analytics data");
     } finally {
       setLoading(false);
     }
-  };
-
-  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884d8"];
-
-  const formatMaterialType = (type: string) => {
-    const map: Record<string, string> = {
-      short_answer: "Short Answer",
-      flashcard: "Flashcards",
-      mcq: "Multiple Choice",
-    };
-    return (
-      map[type] ||
-      type.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
-    );
   };
 
   return (
@@ -249,6 +203,39 @@ export default function Analytics() {
             </ResponsiveContainer>
           </ChartCard>
 
+          {/* Total Chat Sessions Chart */}
+          <ChartCard title="Total Chat Sessions" subtitle="Chat sessions created over time">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart
+                data={analyticsData.timeSeries}
+                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 12, fill: "#6b7280" }}
+                  dy={10}
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 12, fill: "#6b7280" }}
+                />
+                <Tooltip content={<CustomTooltip />} />
+                <Line
+                  type="monotone"
+                  dataKey="chat_sessions"
+                  stroke="#1f6f8b"
+                  strokeWidth={3}
+                  dot={false}
+                  activeDot={{ r: 6, strokeWidth: 0 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
           {/* Total Questions Chart */}
           <ChartCard
             title="Total Questions"
@@ -286,104 +273,6 @@ export default function Analytics() {
                   activeDot={{ r: 6, strokeWidth: 0 }}
                 />
               </LineChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
-          {/* Aggregated Practice Materials Chart */}
-          <ChartCard
-            title="Practice Materials Generated"
-            subtitle="Distribution by type across all textbooks"
-          >
-            {analyticsData.practiceAnalytics ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={analyticsData.practiceAnalytics.by_type}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis
-                    dataKey="material_type"
-                    tickFormatter={formatMaterialType}
-                  />
-                  <YAxis />
-                  <Tooltip
-                    content={<CustomTooltip />}
-                    labelFormatter={formatMaterialType}
-                  />
-                  <Bar dataKey="count" fill="#2c5f7c">
-                    {analyticsData.practiceAnalytics.by_type.map(
-                      (__, index) => (
-                        <Cell
-                          key={`cell-${index}`}
-                          fill={COLORS[index % COLORS.length]}
-                        />
-                      )
-                    )}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-gray-400 text-sm">No data available</p>
-              </div>
-            )}
-          </ChartCard>
-
-          {/* Chat Sessions per Textbook Bar Chart */}
-          <ChartCard
-            title="Chat Sessions by Textbook"
-            subtitle="Distribution of chat sessions across textbooks"
-          >
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart
-                data={analyticsData.chatSessionsByTextbook}
-                margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
-              >
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  vertical={false}
-                  stroke="#e5e7eb"
-                />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: "#6b7280" }}
-                  dy={10}
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: "#6b7280" }}
-                />
-                <Tooltip
-                  cursor={{ fill: "transparent" }}
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      return (
-                        <div className="bg-white border border-gray-200 p-2 rounded-lg shadow-lg text-xs">
-                          <p className="font-semibold mb-1">
-                            {payload[0].payload.name}
-                          </p>
-                          <p className="text-gray-600">
-                            Sessions:{" "}
-                            <span className="font-bold text-gray-900">
-                              {payload[0].value}
-                            </span>
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-                <Bar
-                  dataKey="sessions"
-                  fill="#2c5f7c"
-                  radius={[4, 4, 0, 0]}
-                  barSize={40}
-                />
-              </BarChart>
             </ResponsiveContainer>
           </ChartCard>
         </div>
