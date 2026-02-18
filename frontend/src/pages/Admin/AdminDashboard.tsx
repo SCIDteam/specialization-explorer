@@ -3,7 +3,6 @@ import AdminSidebar from "@/components/Admin/AdminSidebar";
 import TextbookManagement from "@/components/Admin/TextbookManagement";
 import Analytics from "@/components/Admin/Analytics";
 import SystemSettings from "@/components/Admin/SystemSettings";
-import Footer from "@/components/Footer";
 
 // --- Components ---
 
@@ -24,7 +23,6 @@ export default function AdminDashboard() {
           {activeView === "system-settings" && <SystemSettings />}
         </main>
       </div>
-      <Footer />
     </div>
   );
 }
