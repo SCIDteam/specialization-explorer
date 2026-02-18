@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/select";
 import { useMode, type Mode } from "@/providers/mode";
 import { Link } from "react-router";
-import logoImage from "@/assets/specex-new-logo.png";
+import logoImage from "@/assets/SpecEx-logo.png";
 
 export default function HomePageHeader() {
   const { mode, setMode } = useMode();
