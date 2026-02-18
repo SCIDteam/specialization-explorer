@@ -9,7 +9,7 @@ import { Menu, X } from "lucide-react";
 import { useSidebar } from "@/providers/sidebar";
 import { useMode, type Mode } from "@/providers/mode";
 import { Link, useNavigate, useParams } from "react-router";
-import logoImage from "@/assets/specex-new-logo.png";
+import logoImage from "@/assets/SpecEx_logo_black.png";
 
 export default function Header() {
   const { mobileOpen, toggleMobile } = useSidebar();
@@ -27,8 +27,8 @@ export default function Header() {
   };
 
   return (
-    <header className="z-50 h-[70px] fixed top-0 w-screen border-b border-white/10 bg-gradient-to-r from-[#2c5f7c] to-[#3d7a9a]">
-      <div className="w-full flex items-center justify-between px-6 py-4">
+    <header className="bg-gradient-to-r from-primary to-accent text-white h-[80px] flex items-center px-6 shadow-md z-10">
+      <div className="w-full flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* mobile menu button */}
           <button
@@ -48,7 +48,7 @@ export default function Header() {
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             aria-label="Navigate to home"
           >
-            <img src={logoImage} alt="Specialization Explorer AI Logo" className="h-12 w-auto" />
+            <img src={logoImage} alt="Specialization Explorer AI Logo" className="h-10 w-auto" />
             <h1 className="text-xl font-semibold text-white">
               Specialization Explorer AI
             </h1>
@@ -67,3 +67,11 @@ export default function Header() {
     </header>
   );
 }
+
+// {/* Header */}
+//       <header className="bg-gradient-to-r from-primary to-accent text-white h-[70px] flex items-center px-6 shadow-md z-10">
+//         <div className="flex items-center gap-2">
+//           <img src={logoImage} alt="Specialization Explorer AI Logo" className="h-10 w-auto" />
+//           <h1 className="text-xl font-semibold">Specialization Explorer AI Admin</h1>
+//         </div>
+//       </header>
