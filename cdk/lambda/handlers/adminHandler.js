@@ -110,6 +110,70 @@ exports.handler = async (event) => {
         data = "Example endpoint invoked";
         response.body = JSON.stringify(data);
         break;
+      
+      // POST /admin/promote_user - Update an existing user's email + role
+      case "POST /admin/promote_user": {
+        let body;
+        try {
+          body = parseBody(event.body);
+        } catch (error) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: error.message });
+          break;
+        }
+
+        const userId = body?.user_id;
+        const email = (body?.email || "").trim().toLowerCase();
+        const role = body?.role; // 'admin' | 'student'
+
+        if (!userId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "user_id is required" });
+          break;
+        }
+
+        if (!email) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "email is required" });
+          break;
+        }
+
+        const validRoles = ["admin", "student"];
+        if (!validRoles.includes(role)) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "role must be 'admin' or 'student'" });
+          break;
+        }
+
+        const updated = await sqlConnection`
+          UPDATE users
+          SET
+            email = ${email},
+            role = ${role}::user_role,
+            last_seen_at = NOW()
+          WHERE id = ${userId}::uuid
+          RETURNING
+            id,
+            email,
+            display_name,
+            role,
+            created_at,
+            last_seen_at,
+            tokens_used,
+            token_window_started_at,
+            metadata
+        `;
+
+        if (updated.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "User not found" });
+          break;
+        }
+
+        response.statusCode = 200;
+        response.body = JSON.stringify(updated[0]);
+        break;
+      }
 
       // GET /admin/textbooks - Get all textbooks with user and question counts
       case "GET /admin/textbooks":
@@ -1235,6 +1299,232 @@ exports.handler = async (event) => {
         break;
       }
 
+      // GET /admin/system-settings - Fetch latest system settings
+      case "GET /admin/system-settings": {
+        const rows = await sqlConnection`
+          WITH latest AS (
+            SELECT *
+            FROM system_settings
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 1
+          )
+          SELECT
+            latest.id,
+            latest.max_messages_per_session,
+            latest.min_messages_before_suggest,
+            latest.max_characters_per_user_message,
+            latest.max_characters_per_ai_message,
+            latest.temperature,
+            latest.top_p,
+            u.email AS updated_by_email,
+            latest.updated_at
+          FROM latest
+          LEFT JOIN users u ON u.id = latest.updated_by
+        `;
+
+        // But keep a safe fallback to avoid crashing UI.
+        const fallback = {
+          max_messages_per_session: 20,
+          min_messages_before_suggest: 4,
+          max_characters_per_user_message: 2000,
+          max_characters_per_ai_message: 5000,
+          temperature: 0.2,
+          top_p: 0.9,
+          updated_by: null,
+          updated_at: null,
+        };
+
+        response.statusCode = 200;
+        response.body = JSON.stringify(rows[0] ?? fallback);
+        break;
+      }
+
+      // PUT /admin/system-settings - Update settings (patch-style)
+      case "PUT /admin/system-settings": {
+        let body;
+        try {
+          body = parseBody(event.body);
+        } catch (error) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: error.message });
+          break;
+        }
+
+        const isFiniteNumber = (v) => typeof v === "number" && Number.isFinite(v);
+        const isFiniteInt = (v) => Number.isInteger(v) && Number.isFinite(v);
+
+        const allowed = [
+          "max_messages_per_session",
+          "min_messages_before_suggest",
+          "max_characters_per_user_message",
+          "max_characters_per_ai_message",
+          "temperature",
+          "top_p",
+        ];
+
+        const patch = {};
+        for (const key of allowed) {
+          if (body[key] !== undefined) patch[key] = body[key];
+        }
+
+        if (Object.keys(patch).length === 0) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "No valid fields to update" });
+          break;
+        }
+
+        // validation
+        const updatedByEmail = body.updated_by_email;
+        if (!updatedByEmail || typeof updatedByEmail !== "string") {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "updated_by_email is required" });
+          break;
+        }
+
+        if (
+          patch.max_messages_per_session !== undefined &&
+          (!isFiniteInt(patch.max_messages_per_session) ||
+            patch.max_messages_per_session < 1 ||
+            patch.max_messages_per_session > 500)
+        ) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "max_messages_per_session must be an integer between 1 and 500",
+          });
+          break;
+        }
+
+        if (
+          patch.min_messages_before_suggest !== undefined &&
+          (!isFiniteInt(patch.min_messages_before_suggest) ||
+            patch.min_messages_before_suggest < 0 ||
+            patch.min_messages_before_suggest > 500)
+        ) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "min_messages_before_suggest must be an integer between 0 and 500",
+          });
+          break;
+        }
+
+        if (
+          patch.max_characters_per_user_message !== undefined &&
+          (!isFiniteInt(patch.max_characters_per_user_message) ||
+            patch.max_characters_per_user_message < 1 ||
+            patch.max_characters_per_user_message > 200000)
+        ) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "max_characters_per_user_message must be a positive integer",
+          });
+          break;
+        }
+
+        if (
+          patch.max_characters_per_ai_message !== undefined &&
+          (!isFiniteInt(patch.max_characters_per_ai_message) ||
+            patch.max_characters_per_ai_message < 1 ||
+            patch.max_characters_per_ai_message > 200000)
+        ) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "max_characters_per_ai_message must be a positive integer",
+          });
+          break;
+        }
+
+        if (
+          patch.temperature !== undefined &&
+          (!isFiniteNumber(patch.temperature) ||
+            patch.temperature < 0 ||
+            patch.temperature > 2)
+        ) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "temperature must be a number between 0 and 2",
+          });
+          break;
+        }
+
+        if (
+          patch.top_p !== undefined &&
+          (!isFiniteNumber(patch.top_p) || patch.top_p < 0 || patch.top_p > 1)
+        ) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "top_p must be a number between 0 and 1",
+          });
+          break;
+        }
+        
+        // get admin user ID using email
+        const adminRows = await sqlConnection`
+          SELECT id, role
+          FROM users
+          WHERE email = ${updatedByEmail}
+          LIMIT 1
+        `;
+
+        if (adminRows.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          break;
+        }
+
+        if (adminRows[0].role !== "admin") {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "User is not an admin" });
+          break;
+        }
+
+        const updatedByUserId = adminRows[0].id;
+
+        // Single UPDATE of the latest row (no “ensure row exists” step)
+        const updated = await sqlConnection`
+          WITH latest AS (
+            SELECT id
+            FROM system_settings
+            ORDER BY updated_at DESC NULLS LAST
+            LIMIT 1
+          )
+          UPDATE system_settings s
+          SET
+            max_messages_per_session = COALESCE(${patch.max_messages_per_session}, s.max_messages_per_session),
+            min_messages_before_suggest = COALESCE(${patch.min_messages_before_suggest}, s.min_messages_before_suggest),
+            max_characters_per_user_message = COALESCE(${patch.max_characters_per_user_message}, s.max_characters_per_user_message),
+            max_characters_per_ai_message = COALESCE(${patch.max_characters_per_ai_message}, s.max_characters_per_ai_message),
+            temperature = COALESCE(${patch.temperature}, s.temperature),
+            top_p = COALESCE(${patch.top_p}, s.top_p),
+            updated_by = ${updatedByUserId},
+            updated_at = NOW()
+          WHERE s.id = (SELECT id FROM latest)
+          RETURNING
+            s.id,
+            s.max_messages_per_session,
+            s.min_messages_before_suggest,
+            s.max_characters_per_user_message,
+            s.max_characters_per_ai_message,
+            s.temperature,
+            s.top_p,
+            s.updated_by,
+            s.updated_at
+        `;
+
+        if (updated.length === 0) {
+          // Should never happen because you seed system_settings.
+          response.statusCode = 500;
+          response.body = JSON.stringify({
+            error: "system_settings row not found (seed may not have run)",
+          });
+          break;
+        }
+
+        response.statusCode = 200;
+        response.body = JSON.stringify(updated[0]);
+        break;
+      }
+
+      // DEPRECATED since no longer needed in new project --> will delete later
       // GET /admin/settings/token-limit - Get daily token limit
       case "GET /admin/settings/token-limit":
         try {
@@ -1256,6 +1546,7 @@ exports.handler = async (event) => {
         }
         break;
 
+      // DEPRECATED since no longer needed in new project --> will delete later
       // PUT /admin/settings/token-limit - Update daily token limit
       case "PUT /admin/settings/token-limit":
         let tokenLimitData;
@@ -1309,6 +1600,7 @@ exports.handler = async (event) => {
         }
         break;
 
+      // DEPRECATED since no longer needed in new project --> will delete later
       // GET /admin/settings/system-prompt - Get system prompt
       case "GET /admin/settings/system-prompt":
         try {
@@ -1331,6 +1623,7 @@ exports.handler = async (event) => {
         }
         break;
 
+      // DEPRECATED since no longer needed in new project --> will delete later
       // PUT /admin/settings/system-prompt - Update system prompt
       case "PUT /admin/settings/system-prompt":
         let promptData;
@@ -1371,6 +1664,7 @@ exports.handler = async (event) => {
         }
         break;
 
+      // DEPRECATED since no longer needed in new project --> will delete later
       // GET /admin/settings/user-guidelines - Get user guidelines
       case "GET /admin/settings/user-guidelines":
         try {
@@ -1394,6 +1688,7 @@ exports.handler = async (event) => {
         }
         break;
 
+      // DEPRECATED since no longer needed in new project --> will delete later
       // PUT /admin/settings/user-guidelines - Update user guidelines
       case "PUT /admin/settings/user-guidelines":
         let guidelinesData;

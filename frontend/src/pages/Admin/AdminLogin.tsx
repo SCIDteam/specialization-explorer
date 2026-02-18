@@ -14,8 +14,10 @@ import { confirmSignIn } from "aws-amplify/auth";
 import { Eye, EyeOff } from "lucide-react";
 import { AuthService } from "@/functions/authService";
 import Footer from "@/components/Footer";
+import { useUser } from "@/providers/user";
 
 export default function AdminLogin() {
+  const { userId } = useUser();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -47,6 +49,33 @@ export default function AdminLogin() {
     checkAuthStatus();
   }, [navigate]);
 
+  const updateAdminUser = async (email: string) => {
+    if (!userId) throw new Error("Missing userId");
+
+    const session = await AuthService.getAuthSession(true);
+    const token = session.tokens.idToken;
+
+    const res = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/admin/promote_user`, {
+      method: "POST",
+      headers: {
+        Authorization: token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        user_id: userId,
+        email,
+        role: "admin",
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Failed to update admin user: ${res.status} ${text}`);
+    }
+
+    return res.json();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -61,6 +90,7 @@ export default function AdminLogin() {
       }
 
       if (result.isSignedIn) {
+        await updateAdminUser(email);
         navigate(from, { replace: true });
       } else if (
         result.nextStep?.signInStep ===
