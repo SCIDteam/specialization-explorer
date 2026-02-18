@@ -7,22 +7,23 @@ import {
 } from "@/components/ui/select";
 import { Menu, X } from "lucide-react";
 import { useSidebar } from "@/providers/sidebar";
-import { useMode, type Mode } from "@/providers/mode";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import logoImage from "@/assets/SpecEx_logo_black.png";
+
+type Mode = "student" | "admin";
 
 export default function Header() {
   const { mobileOpen, toggleMobile } = useSidebar();
-  const { mode, setMode } = useMode();
+  const location = useLocation();
   const navigate = useNavigate();
-  const { id: textbookId } = useParams();
 
-  const handleModeChange = async (newMode: Mode) => {
-    await setMode(newMode);
-    // Navigate to chat page and reload to refresh all components
-    if (textbookId) {
-      navigate(`/textbook/${textbookId}/chat`);
-      window.location.reload();
+  const mode: Mode = location.pathname.startsWith("/admin") ? "admin" : "student";
+
+  const handleModeChange = (newMode: Mode) => {
+    if (newMode === "admin") {
+      navigate("/admin/login");
+    } else {
+      navigate("/");
     }
   };
 
@@ -30,7 +31,6 @@ export default function Header() {
     <header className="bg-gradient-to-r from-primary to-accent text-white h-[80px] flex items-center px-6 shadow-md z-10">
       <div className="w-full flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* mobile menu button */}
           <button
             onClick={toggleMobile}
             aria-label="Toggle menu"
@@ -43,7 +43,8 @@ export default function Header() {
               <Menu className="h-5 w-5 text-white" />
             )}
           </button>
-          <Link 
+
+          <Link
             to="/"
             className="flex items-center gap-2 hover:opacity-80 transition-opacity"
             aria-label="Navigate to home"
@@ -54,13 +55,14 @@ export default function Header() {
             </h1>
           </Link>
         </div>
+
         <Select value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
-          <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white  [&_svg:not([class*='text-'])]:text-primary-foreground hover:bg-white/10">
+          <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white [&_svg:not([class*='text-'])]:text-primary-foreground hover:bg-white/10">
             <SelectValue placeholder="Select mode" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="student">Mode: Student</SelectItem>
-            <SelectItem value="instructor">Mode: Instructor</SelectItem>
+            <SelectItem value="admin">Mode: Admin</SelectItem>
           </SelectContent>
         </Select>
       </div>
