@@ -175,6 +175,48 @@ exports.handler = async (event) => {
         break;
       }
 
+      // GET /admin/system-messages - Fetch all system messages with version history
+      case "GET /admin/system-messages": {
+        const rows = await sqlConnection`
+          SELECT
+            sm.id,
+            sm.type,
+            sm.content,
+            sm.version,
+            sm.is_active,
+            sm.created_by,
+            sm.created_at,
+            u.email AS created_by_email
+          FROM system_messages sm
+          LEFT JOIN users u ON u.id = sm.created_by
+          ORDER BY
+            sm.type ASC,
+            sm.is_active DESC,
+            sm.version DESC,
+            sm.created_at DESC
+        `;
+
+        // Group into { [type]: SystemMessageVersion[] }
+        const grouped = {};
+        for (const r of rows) {
+          if (!grouped[r.type]) grouped[r.type] = [];
+          grouped[r.type].push({
+            id: r.id,
+            type: r.type,
+            content: r.content,
+            version: r.version,
+            is_active: r.is_active,
+            created_by: r.created_by ?? null,
+            created_by_email: r.created_by_email ?? null,
+            created_at: r.created_at,
+          });
+        }
+
+        response.statusCode = 200;
+        response.body = JSON.stringify(grouped);
+        break;
+      }
+
       // GET /admin/textbooks - Get all textbooks with user and question counts
       case "GET /admin/textbooks":
         const adminLimit = Math.min(

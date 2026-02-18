@@ -261,10 +261,29 @@ export default function SystemSettings() {
     }
   };
 
-  // TODO: later replace this with GET /admin/system-messages
   const fetchSystemMessages = async () => {
-    // TODO: frontend only rn
-    setMessages(DEFAULT_SYSTEM_MESSAGES);
+    try {
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      const res = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/system-messages`,
+        {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to fetch system messages");
+      const data = await res.json();
+      setMessages(data);
+    } catch (e) {
+      console.error(e);
+      // fallback to defaults if desired
+      setMessages(DEFAULT_SYSTEM_MESSAGES);
+    }
   };
 
   const handleSaveSystemSettings = async () => {
