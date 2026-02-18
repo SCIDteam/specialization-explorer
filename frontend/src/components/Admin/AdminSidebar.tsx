@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { AuthService } from "@/functions/authService";
 
 type AdminSidebarProps = {
-  activeView: "dashboard" | "analytics" | "system-settings";
+  activeView: "dashboard" | "analytics" | "system-settings" | "chat-history";
   onViewChange: (
-    view: "dashboard" | "analytics" | "system-settings"
+    view: "dashboard" | "analytics" | "system-settings" | "chat-history"
   ) => void;
 };
 
@@ -83,6 +83,17 @@ export default function AdminSidebar({
         >
           <Bot className="mr-2 h-4 w-4" />
           System Settings
+        </Button>
+        <Button
+          variant={activeView === "chat-history" ? "secondary" : "ghost"}
+          className={`w-full justify-start ${activeView === "chat-history"
+            ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+            : "text-gray-600"
+            }`}
+          onClick={() => onViewChange("chat-history")}
+        >
+          <Bot className="mr-2 h-4 w-4" />
+          Chat History
         </Button>
       </div>
 

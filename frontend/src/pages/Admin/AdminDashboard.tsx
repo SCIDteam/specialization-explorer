@@ -8,7 +8,7 @@ import SystemSettings from "@/components/Admin/SystemSettings";
 
 export default function AdminDashboard() {
   const [activeView, setActiveView] = useState<
-    "dashboard" | "analytics" | "system-settings"
+    "dashboard" | "analytics" | "system-settings" | "chat-history"
   >("dashboard");
 
   return (
@@ -21,6 +21,7 @@ export default function AdminDashboard() {
           {activeView === "dashboard" && <TextbookManagement />}
           {activeView === "analytics" && <Analytics />}
           {activeView === "system-settings" && <SystemSettings />}
+          {activeView === "chat-history" && <SystemSettings />}
         </main>
       </div>
     </div>
