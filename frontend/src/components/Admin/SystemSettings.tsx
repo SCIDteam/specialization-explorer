@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { AuthService } from "@/functions/authService";
 import WelcomeMessageEditor from "@/components/Admin/WelcomeMessageEditor";
 
-export default function AISettings() {
+export default function SystemSettings() {
   const [tokenLimit, setTokenLimit] = useState(1000);
   const [isUnlimited, setIsUnlimited] = useState(false);
   const [isSavingToken, setIsSavingToken] = useState(false);
@@ -246,7 +246,7 @@ export default function AISettings() {
   return (
     <div className="space-y-8 max-w-7xl mx-auto animate-in fade-in duration-500">
       <div>
-      <h2 className="text-3xl font-bold text-gray-900">Platform Configuration</h2>
+      <h2 className="text-3xl font-bold text-gray-900">System Settings</h2>
         <p className="text-gray-500 mt-1">
           Configure global platform settings including token limits, AI behavior, User Guidelines and welcome messages.
         </p>

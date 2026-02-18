@@ -5,15 +5,14 @@ import {
   BarChart3,
   LogOut,
   Bot,
-  MessageSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AuthService } from "@/functions/authService";
 
 type AdminSidebarProps = {
-  activeView: "dashboard" | "analytics" | "ai-settings" | "faqs-prompts" | "media" | "content-sections";
+  activeView: "dashboard" | "analytics" | "system-settings";
   onViewChange: (
-    view: "dashboard" | "analytics" | "ai-settings" | "faqs-prompts" | "media" | "content-sections"
+    view: "dashboard" | "analytics" | "system-settings"
   ) => void;
 };
 
@@ -75,26 +74,15 @@ export default function AdminSidebar({
           Analytics
         </Button>
         <Button
-          variant={activeView === "ai-settings" ? "secondary" : "ghost"}
-          className={`w-full justify-start ${activeView === "ai-settings"
+          variant={activeView === "system-settings" ? "secondary" : "ghost"}
+          className={`w-full justify-start ${activeView === "system-settings"
             ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
             : "text-gray-600"
             }`}
-          onClick={() => onViewChange("ai-settings")}
+          onClick={() => onViewChange("system-settings")}
         >
           <Bot className="mr-2 h-4 w-4" />
-          Platform Config
-        </Button>
-        <Button
-          variant={activeView === "faqs-prompts" ? "secondary" : "ghost"}
-          className={`w-full justify-start ${activeView === "faqs-prompts"
-            ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-            : "text-gray-600"
-            }`}
-          onClick={() => onViewChange("faqs-prompts")}
-        >
-          <MessageSquare className="mr-2 h-4 w-4" />
-          FAQs & Prompts
+          System Settings
         </Button>
       </div>
 

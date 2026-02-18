@@ -50,7 +50,7 @@ The frontend uses Tailwind and CSS variables for theme colors and spacing. The p
 - The built CSS is included in a prebuilt dist file (e.g., `frontend/dist/assets/index-*.css`) and is compiled through the Vite/Tailwind pipeline.
 
 ### Component-specific styling
-- Components often reference colors directly (e.g., className `bg-[#2c5f7c]` in `AISettings.tsx`). To change these, search for hex codes or class names in `frontend/src/components/`.
+- Components often reference colors directly (e.g., className `bg-[#2c5f7c]` in `SystemSettings.tsx`). To change these, search for hex codes or class names in `frontend/src/components/`.
 
 ---
 
@@ -217,7 +217,7 @@ exports.down = async function (knex) {
 
 - Daily token limit SSM parameter is configured in `cdk/lib/api-stack.ts` (`/${id}/SpecEx/DailyTokenLimit`) and added to `DailyTokenLimitParameter`.
 - Admin APIs for reading and writing the token limit are present in `cdk/lambda/handlers/adminHandler.js` (endpoints: `GET /admin/settings/token-limit`, `PUT /admin/settings/token-limit`).
-- On the frontend, `frontend/src/components/Admin/AISettings.tsx` provides a token limit editor UI calling these endpoints.
+- On the frontend, `frontend/src/components/Admin/SystemSettings.tsx` provides a token limit editor UI calling these endpoints.
 
 ---
 
