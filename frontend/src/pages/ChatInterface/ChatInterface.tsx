@@ -163,7 +163,6 @@ export default function AIChatPage() {
   // WebSocket message handlers - memoized to prevent unnecessary reconnections
   const handleWebSocketMessage = useCallback(
     (message: any) => {
-      console.log("[WebSocket] Received message:", message);
 
       switch (message.type) {
         case "start":
@@ -498,15 +497,11 @@ export default function AIChatPage() {
     if (isConnected && webSocketUrl) {
       console.log("[WebSocket] Sending message via WebSocket:", {
         action: "generate_text",
-        query: text,
-        chat_session_id: activeChatSessionId,
-        user_id: userId,
+        query: text
       });
       const success = sendWebSocketMessage({
         action: "generate_text",
-        query: text,
-        chat_session_id: activeChatSessionId,
-        user_id: userId,
+        query: text
       });
 
       if (success) {
