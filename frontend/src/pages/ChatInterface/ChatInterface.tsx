@@ -307,13 +307,31 @@ export default function AIChatPage() {
         // Optimized check: Skip first message ONLY if it matches the system prompt
         const startIndex = (rawMessages.length > 0 && rawMessages[0].content === WELCOME_PROMPT) ? 1 : 0;
 
-        const chatMessages: Message[] = rawMessages.slice(startIndex).map((m) => ({
-          id: m.id,
-          sender: m.sender === "AI" ? ("bot" as const) : ("user" as const),
-          text: m.content,
-          sources_used: m.sender === "AI" ? (m.sources ? [m.sources] : []) : [],
-          time: new Date(m.created_at).getTime(),
-        }));
+        const chatMessages: Message[] = rawMessages.slice(startIndex).map((m) => {
+          let parsedSources: any[] = [];
+          if (m.sender === "AI" && m.sources) {
+            if (Array.isArray(m.sources)) {
+              parsedSources = m.sources;
+            } else if (typeof m.sources === "string") {
+              try {
+                const parsed = JSON.parse(m.sources);
+                parsedSources = Array.isArray(parsed) ? parsed : [parsed];
+              } catch {
+                parsedSources = [m.sources];
+              }
+            } else {
+              parsedSources = [m.sources];
+            }
+          }
+
+          return {
+            id: m.id,
+            sender: m.sender === "AI" ? ("bot" as const) : ("user" as const),
+            text: m.content,
+            sources_used: parsedSources,
+            time: new Date(m.created_at).getTime(),
+          };
+        });
 
         // Ensure order (backend already orders, but safe)
         chatMessages.sort((a, b) => a.time - b.time);

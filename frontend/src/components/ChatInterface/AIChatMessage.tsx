@@ -11,7 +11,7 @@ import TypingIndicator from "./TypingIndicator";
 
 type AIChatMessageProps = {
   text: string;
-  sources?: string[];
+  sources?: any[];
   isTyping?: boolean;
   messageTime?: number;
   initialLoadTime?: number | null;
@@ -44,53 +44,102 @@ export default function AIChatMessage({
     }
   }, [settings, isTyping, messageTime, initialLoadTime, speak]);
 
-  const formatSource = (source: string) => {
-    // Check if source contains URL
-    const urlMatch = source.match(/(https?:\/\/[^\s]+)/g);
+  const formatSource = (source: any) => {
+    if (typeof source === "string") {
+      // Check if source contains URL
+      const urlMatch = source.match(/(https?:\/\/[^\s]+)/g);
 
-    // Check if source contains page reference (p. X)
-    const pageMatch = source.match(/\(p\.\s*(\d+)\)/i);
+      // Check if source contains page reference (p. X)
+      const pageMatch = source.match(/\(p\.\s*(\d+)\)/i);
 
-    if (urlMatch) {
-      // Format URL sources
-      return (
-        <div className="flex flex-col w-full">
-          <div className="flex items-center gap-1.5">
-            <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-            <span className="font-medium text-xs">Source link:</span>
+      if (urlMatch) {
+        // Format URL sources
+        return (
+          <div className="flex flex-col w-full">
+            <div className="flex items-center gap-1.5">
+              <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="font-medium text-xs">Source link:</span>
+            </div>
+            <a
+              href={urlMatch[0]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:underline hover:text-primary/80 transition-colors break-words pl-4 text-xs"
+              title={urlMatch[0]}
+            >
+              {urlMatch[0]}
+            </a>
+            {pageMatch && (
+              <div className="pl-4 mt-1">
+                <span className="text-muted-foreground text-xs font-medium">
+                  Page: {pageMatch[1]}
+                </span>
+              </div>
+            )}
           </div>
-          <a
-            href={urlMatch[0]}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-primary hover:underline hover:text-primary/80 transition-colors break-words pl-4 text-xs"
-            title={urlMatch[0]}
-          >
-            {urlMatch[0]}
-          </a>
-          {pageMatch && (
-            <div className="pl-4 mt-1">
-              <span className="text-muted-foreground text-xs font-medium">
-                Page: {pageMatch[1]}
-              </span>
+        );
+      } else {
+        // Format textbook sources or other references
+        return (
+          <div className="flex flex-col w-full">
+            <div className="flex items-center gap-1.5">
+              <BookOpen className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+              <span className="font-medium text-xs">Source:</span>
+            </div>
+            <span className="text-muted-foreground break-words pl-4 text-xs">
+              {source}
+            </span>
+          </div>
+        );
+      }
+    }
+
+    if (source && typeof source === "object") {
+      const { uri, url, content, type } = source;
+      const displayUrl = url || uri;
+      const displayContent = content
+        ? content.length > 250
+          ? content.substring(0, 250) + "..."
+          : content
+        : "";
+      const isWeb = type === "WEB" || (displayUrl && displayUrl.startsWith("http"));
+
+      return (
+        <div className="flex flex-col w-full gap-1.5">
+          {displayUrl && (
+            <div className="flex items-start gap-1.5">
+              {isWeb ? (
+                <ExternalLink className="h-3 w-3 mt-0.5 text-muted-foreground flex-shrink-0" />
+              ) : (
+                <BookOpen className="h-3 w-3 mt-0.5 text-muted-foreground flex-shrink-0" />
+              )}
+              {isWeb ? (
+                <a
+                  href={displayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline hover:text-primary/80 transition-colors text-xs font-medium break-all"
+                  title={displayUrl}
+                >
+                  {displayUrl}
+                </a>
+              ) : (
+                <span className="font-medium text-xs break-all">
+                  {displayUrl}
+                </span>
+              )}
+            </div>
+          )}
+          {displayContent && (
+            <div className="text-xs text-muted-foreground pl-4 border-l-2 border-muted/50 ml-[5px] mt-1 italic">
+              "{displayContent}"
             </div>
           )}
         </div>
       );
-    } else {
-      // Format textbook sources or other references
-      return (
-        <div className="flex flex-col w-full">
-          <div className="flex items-center gap-1.5">
-            <BookOpen className="h-3 w-3 text-muted-foreground flex-shrink-0" />
-            <span className="font-medium text-xs">Source:</span>
-          </div>
-          <span className="text-muted-foreground break-words pl-4 text-xs">
-            {source}
-          </span>
-        </div>
-      );
     }
+
+    return null;
   };
 
   return (
@@ -256,9 +305,9 @@ export default function AIChatMessage({
             <button
               className="text-muted-foreground hover:text-foreground p-1"
               onClick={() => {
-                  if (isPlaying) cancel();
-                  else speak(text, { enabled: true, id });
-                }}
+                if (isPlaying) cancel();
+                else speak(text, { enabled: true, id });
+              }}
               aria-label={isSpeaking ? "Stop narration" : "Read aloud"}
             >
               {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
