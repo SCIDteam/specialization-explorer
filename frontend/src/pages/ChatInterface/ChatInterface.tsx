@@ -271,6 +271,10 @@ export default function AIChatPage() {
       return;
     }
 
+    // Reset the started ref whenever the active session changes
+    // This fixes the bug where AI doesn't start a new conversation after a previous one
+    hasStartedRef.current = false;
+
     const loadChatHistory = async () => {
       setIsLoadingHistory(true);
       try {
@@ -460,6 +464,7 @@ export default function AIChatPage() {
     let text = message.trim();
     if (!text) return;
 
+
     // Ensure we have an active chat session
     if (!activeChatSessionId) return;
 
@@ -485,6 +490,9 @@ export default function AIChatPage() {
     setMessages((m) => [...m, userMsg, botMsg]);
     setStreamingMessageId(botMsg.id);
     setIsStreaming(true);
+
+    // Clear the input box text immediately 
+    setMessage("");
 
     // Try WebSocket streaming first, fallback to HTTP if not connected
     if (isConnected && webSocketUrl) {
