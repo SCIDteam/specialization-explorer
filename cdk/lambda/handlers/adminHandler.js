@@ -1744,11 +1744,59 @@ exports.handler = async (event) => {
         response.body = "";
         break;
 
-      // GET /admin/analytics - Get analytics data
+      // Get analytics data
       case "GET /admin/analytics": {
-        const timeRange = event.queryStringParameters?.timeRange || "90d";
+        const qs = event.queryStringParameters ?? {};
 
-        // Parse "90d" (cap 365)
+        // If timeRange is NOT provided, return all-time totals only (no timeSeries)
+        const timeRangeProvided = typeof qs.timeRange === "string" && qs.timeRange.trim().length > 0;
+
+        // Helper: compute totals (either all-time or since startDate)
+        const fetchTotals = async (startDateIso /* string | null */) => {
+          if (!startDateIso) {
+            const totalsRows = await sqlConnection`
+              SELECT
+                (SELECT COUNT(DISTINCT cs.user_id)::int FROM chat_sessions cs) AS users,
+                (SELECT COUNT(cs.id)::int FROM chat_sessions cs) AS chat_sessions,
+                (SELECT COUNT(cm.id)::int FROM chat_messages cm) AS messages,
+                (SELECT COUNT(cm.id)::int FROM chat_messages cm WHERE cm.sender = 'user') AS questions
+            `;
+            return totalsRows[0];
+          }
+
+          const totalsRows = await sqlConnection`
+            SELECT
+              (SELECT COUNT(DISTINCT cs.user_id)::int
+              FROM chat_sessions cs
+              WHERE cs.created_at >= ${startDateIso}) AS users,
+
+              (SELECT COUNT(cs.id)::int
+              FROM chat_sessions cs
+              WHERE cs.created_at >= ${startDateIso}) AS chat_sessions,
+
+              (SELECT COUNT(cm.id)::int
+              FROM chat_messages cm
+              WHERE cm.created_at >= ${startDateIso}) AS messages,
+
+              (SELECT COUNT(cm.id)::int
+              FROM chat_messages cm
+              WHERE cm.created_at >= ${startDateIso}
+                AND cm.sender = 'user') AS questions
+          `;
+          return totalsRows[0];
+        };
+
+        if (!timeRangeProvided) {
+          const totals = await fetchTotals(null);
+
+          response.statusCode = 200;
+          response.body = JSON.stringify({ totals });
+          break;
+        }
+
+        // time series for provided timeRange (cap 365)
+        const timeRange = qs.timeRange || "90d";
+
         let daysBack = 90;
         const m = String(timeRange).match(/^(\d+)([dmy])$/);
         if (m) {
@@ -1762,11 +1810,12 @@ exports.handler = async (event) => {
 
         const startDate = new Date();
         startDate.setDate(startDate.getDate() - daysBack);
+        const startDateIso = startDate.toISOString();
 
         const timeSeries = await sqlConnection`
           WITH date_series AS (
             SELECT generate_series(
-              DATE_TRUNC('day', ${startDate.toISOString()}::timestamp),
+              DATE_TRUNC('day', ${startDateIso}::timestamp),
               DATE_TRUNC('day', NOW()),
               '1 day'::interval
             )::date AS date
@@ -1777,7 +1826,7 @@ exports.handler = async (event) => {
               COUNT(cs.id)::int AS chat_sessions,
               COUNT(DISTINCT cs.user_id)::int AS session_users
             FROM chat_sessions cs
-            WHERE cs.created_at >= ${startDate.toISOString()}
+            WHERE cs.created_at >= ${startDateIso}
             GROUP BY DATE_TRUNC('day', cs.created_at)::date
           ),
           daily_questions AS (
@@ -1787,7 +1836,7 @@ exports.handler = async (event) => {
               COUNT(DISTINCT cs.user_id)::int AS question_users
             FROM chat_messages cm
             JOIN chat_sessions cs ON cs.id = cm.chat_session_id
-            WHERE cm.created_at >= ${startDate.toISOString()}
+            WHERE cm.created_at >= ${startDateIso}
               AND cm.sender = 'user'
             GROUP BY DATE_TRUNC('day', cm.created_at)::date
           )
@@ -1802,8 +1851,10 @@ exports.handler = async (event) => {
           ORDER BY ds.date ASC
         `;
 
+        const totals = await fetchTotals(startDateIso);
+
         response.statusCode = 200;
-        response.body = JSON.stringify({ timeSeries });
+        response.body = JSON.stringify({ timeSeries, totals });
         break;
       }
 

@@ -1181,14 +1181,22 @@ paths:
             default: "90d"
       responses:
         "200":
-          description: Analytics time series
+          description: Analytics time series and totals
           content:
             application/json:
               schema:
                 type: object
                 properties:
+                  totals:
+                    type: object
+                    properties:
+                      users: { type: integer }
+                      chat_sessions: { type: integer }
+                      messages: { type: integer }
+                      questions: { type: integer }
                   timeSeries:
                     type: array
+                    nullable: true
                     items:
                       type: object
                       properties:

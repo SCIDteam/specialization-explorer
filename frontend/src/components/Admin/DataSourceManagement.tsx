@@ -37,6 +37,13 @@ import {
 } from "@/components/ui/dialog";
 import MetricCard from "./MetricCard.tsx";
 
+type AnalyticsTotals = {
+  users: number;
+  chat_sessions: number;
+  messages: number;
+  questions?: number;
+};
+
 type PaginationInfo = {
   limit: number;
   offset: number;
@@ -62,8 +69,52 @@ export default function DataSourceManagement() {
     message: string;
   }>({ type: null, message: "" });
 
-  const totalUsers = 1;
-  const totalMessages = 1;
+  const [totals, setTotals] = useState<AnalyticsTotals>({
+    users: 0,
+    chat_sessions: 0,
+    messages: 0,
+    questions: 0,
+  });
+
+  const fetchAnalyticsTotals = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      // no timeRange so backend returns ALL-TIME totals
+      const res = await fetch(`${import.meta.env.VITE_API_ENDPOINT}/admin/analytics`, {
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!res.ok) throw new Error("Failed to fetch analytics");
+
+      const data = (await res.json()) as { totals: AnalyticsTotals };
+
+      setTotals({
+        users: data.totals?.users ?? 0,
+        chat_sessions: data.totals?.chat_sessions ?? 0,
+        messages: data.totals?.messages ?? 0,
+        questions: data.totals?.questions ?? 0,
+      });
+    } catch (e) {
+      console.error(e);
+      setError("Failed to load analytics");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnalyticsTotals();
+    // later you’ll also fetch data sources here
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleFileSelect = (selectedFile: File) => {
     setUploadStatus({ type: null, message: "" });
@@ -180,24 +231,26 @@ export default function DataSourceManagement() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <MetricCard
           title="Total Users"
-          value={loading ? "..." : totalUsers.toString()}
+          value={loading ? "..." : totals.users.toLocaleString()}
           icon={<Users className="h-5 w-5 text-[#2c5f7c]" />}
           trend="Unique users"
-          tooltip="Calculated by summing the user count from each browser cookie."
+          tooltip="Calculated by counting distinct users with chat sessions."
         />
+
         <MetricCard
           title="Total Chat sessions"
-          value={loading ? "..." : totalUsers.toString()}
+          value={loading ? "..." : totals.chat_sessions.toLocaleString()}
           icon={<MessageCircleMore className="h-5 w-5 text-[#2c5f7c]" />}
           trend="Total Chat sessions"
-          tooltip="Calculated by summing the total chats by all users across all users."
+          tooltip="Total chat sessions across all users."
         />
+
         <MetricCard
           title="Total Messages"
-          value={loading ? "..." : totalMessages.toLocaleString()}
+          value={loading ? "..." : totals.messages.toLocaleString()}
           icon={<HelpCircle className="h-5 w-5 text-[#3d7a9a]" />}
           trend="Total Messages Exchanged"
-          tooltip="Calculated by summing the message count from each user chat session."
+          tooltip="Total chat messages exchanged across all sessions."
         />
       </div>
 
