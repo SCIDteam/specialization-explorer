@@ -110,7 +110,7 @@ exports.handler = async (event) => {
         data = "Example endpoint invoked";
         response.body = JSON.stringify(data);
         break;
-      
+
       // POST /admin/promote_user - Update an existing user's email + role
       case "POST /admin/promote_user": {
         let body;
@@ -289,7 +289,7 @@ exports.handler = async (event) => {
         }
 
         const createdByUserId = adminRows[0].id;
-        
+
         // Create new version, make it active, deactivate old
         try {
           const created = await sqlConnection.begin(async (tx) => {
@@ -651,9 +651,9 @@ exports.handler = async (event) => {
               activated: out[0],
               previous_active: previousActive
                 ? {
-                    id: previousActive.id,
-                    version: previousActive.version,
-                  }
+                  id: previousActive.id,
+                  version: previousActive.version,
+                }
                 : null,
             };
           });
@@ -1226,7 +1226,7 @@ exports.handler = async (event) => {
           },
         });
         break;
-      
+
       // DEPRECATED since no longer needed in new project --> will delete later
       // GET /admin/analytics/practice - Get aggregated practice material analytics
       case "GET /admin/analytics/practice":
@@ -1869,6 +1869,7 @@ exports.handler = async (event) => {
           "max_characters_per_ai_message",
           "temperature",
           "top_p",
+          "specialization_list",
         ];
 
         const patch = {};
@@ -1965,7 +1966,7 @@ exports.handler = async (event) => {
           });
           break;
         }
-        
+
         // get admin user ID using email
         const adminRows = await sqlConnection`
           SELECT id, role
@@ -2004,6 +2005,7 @@ exports.handler = async (event) => {
             max_characters_per_ai_message = COALESCE(${patch.max_characters_per_ai_message}, s.max_characters_per_ai_message),
             temperature = COALESCE(${patch.temperature}, s.temperature),
             top_p = COALESCE(${patch.top_p}, s.top_p),
+            specialization_list = COALESCE(${patch.specialization_list}, s.specialization_list),
             updated_by = ${updatedByUserId},
             updated_at = NOW()
           WHERE s.id = (SELECT id FROM latest)
@@ -2015,6 +2017,7 @@ exports.handler = async (event) => {
             s.max_characters_per_ai_message,
             s.temperature,
             s.top_p,
+            s.specialization_list,
             s.updated_by,
             s.updated_at
         `;

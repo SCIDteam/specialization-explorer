@@ -31,7 +31,7 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int]:
 
 {config.INSTRUCTIONS}
 
-{config.SPEC_PROMPT} #TODO: update the spec list and spec prompt to fetch from the Database
+{config.SPEC_PROMPT}
 """.strip()
 
     return full_prompt, retrieval_count
