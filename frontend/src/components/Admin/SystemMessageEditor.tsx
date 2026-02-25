@@ -1,5 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { Bot, ChevronLeft, ChevronRight, CheckCircle2, Save } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, CheckCircle2, Save, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Card,
   CardContent,
@@ -39,7 +47,9 @@ type Props = {
   adminEmail?: string | null;
 
   onCreateVersion: (type: SystemMessageType, newVersion: SystemMessageVersion) => void;
+  onDeleteVersion: (type: SystemMessageType, versionId: string) => void;
   onSave: (type: SystemMessageType, content: string) => Promise<SystemMessageVersion>;
+  onDelete: (type: SystemMessageType, versionId: string) => Promise<void>;
 };
 
 function formatDate(iso?: string) {
@@ -61,7 +71,9 @@ export default function SystemMessageEditor({
   versions,
   adminEmail,
   onCreateVersion,
+  onDeleteVersion,
   onSave,
+  onDelete,
 }: Props) {
   const sorted = useMemo(() => {
     // Active first, then version desc, then created_at desc
@@ -83,6 +95,9 @@ export default function SystemMessageEditor({
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     setDraft(current?.content ?? "");
@@ -133,6 +148,35 @@ export default function SystemMessageEditor({
       setSaveError("Saved locally (backend save failed).");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!current?.id) return;
+    if (current.is_active) return;
+
+    setDeleting(true);
+    setSaveError(null);
+
+    try {
+      await onDelete(type, current.id);
+
+      // Remove from parent state
+      onDeleteVersion(type, current.id);
+
+      // Move index safely after deletion
+      setIdx((prev) => {
+        const nextLength = Math.max(sorted.length - 1, 0);
+        if (nextLength === 0) return 0;
+        return Math.min(prev, nextLength - 1);
+      });
+
+      setDeleteOpen(false);
+    } catch (e) {
+      console.error(e);
+      setSaveError("Failed to delete version.");
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -266,19 +310,63 @@ export default function SystemMessageEditor({
           )}
         </div>
 
-        {/* Save button */}
-        <div className="pt-2">
+        {/* Save and Delete buttons */}
+        <div className="pt-2 flex flex-wrap gap-2">
           <Button
             type="button"
             onClick={handleSave}
-            disabled={saving || !canEdit || !isDirty || !(draft ?? "").trim()}
+            disabled={saving || deleting || !canEdit || !isDirty || !(draft ?? "").trim()}
             className="bg-[#2c5f7c] hover:bg-[#234d63]"
           >
             <Save className="mr-2 h-4 w-4" />
             {saving ? "Saving..." : "Save New Version"}
           </Button>
+
+          {!current?.is_active ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(true)}
+              disabled={saving || deleting || !current?.id}
+              className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete Version
+            </Button>
+          ) : null}
         </div>
       </CardContent>
+      <Dialog open={deleteOpen} onOpenChange={(open) => !deleting && setDeleteOpen(open)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Are you sure?</DialogTitle>
+            <DialogDescription>
+              This will permanently remove version{" "}
+              <span className="font-medium">v{current?.version ?? "?"}</span> of{" "}
+              <span className="font-medium">{title}</span>.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteOpen(false)}
+              disabled={deleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {deleting ? "Deleting..." : "Yes, Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

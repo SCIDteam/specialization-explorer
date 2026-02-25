@@ -372,6 +372,46 @@ export default function SystemSettings() {
     return (await res.json()) as SystemMessageVersion;
   };
 
+  const handleDeleteSystemMessageVersion = (
+    type: SystemMessageType,
+    versionId: string
+  ) => {
+    setMessages((prev) => {
+      const existing = prev[type] ?? [];
+      return {
+        ...prev,
+        [type]: existing.filter((v) => v.id !== versionId),
+      };
+    });
+  };
+
+  const deleteSystemMessage = async (
+    type: SystemMessageType,
+    versionId: string
+  ): Promise<void> => {
+    const session = await AuthService.getAuthSession(true);
+    const token = session.tokens.idToken;
+
+    if (!adminEmail) throw new Error("Missing adminEmail");
+
+    const res = await fetch(
+      `${import.meta.env.VITE_API_ENDPOINT}/admin/system-messages/${type}/${versionId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ adminEmail }),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`Failed to delete system message (${res.status}): ${text}`);
+    }
+  };
+
   useEffect(() => {
     fetchAdminCredentials();
     fetchSystemSettings();
@@ -566,7 +606,9 @@ export default function SystemSettings() {
               versions={messages[t] ?? []}
               adminEmail={adminEmail}
               onCreateVersion={handleCreateSystemMessageVersion}
+              onDeleteVersion={handleDeleteSystemMessageVersion}
               onSave={saveSystemMessage}
+              onDelete={deleteSystemMessage}
             />
           ))}
         </div>
