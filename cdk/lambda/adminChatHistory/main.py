@@ -17,7 +17,7 @@ def handler(event, context):
                 'statusCode': 405,
                 'headers': {
                     'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Credentials': True
+                    'Access-Control-Allow-Credentials': 'true'
                 },
                 'body': json.dumps({'error': 'Method Not Allowed'})
             }
@@ -70,7 +70,7 @@ def handler(event, context):
             'statusCode': 200,
             'headers': {
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Credentials': True
+                'Access-Control-Allow-Credentials': 'true'
             },
             'body': json.dumps(response_data)
         }
@@ -84,7 +84,7 @@ def _respond_error(status_code, message):
         'statusCode': status_code,
         'headers': {
             'Access-Control-Allow-Origin': '*',
-            'Access-Control-Allow-Credentials': True
+            'Access-Control-Allow-Credentials': 'true'
         },
         'body': json.dumps({'error': message})
     }
