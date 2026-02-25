@@ -56,8 +56,10 @@ exports.up = (pgm) => {
     -- Data Sources (admin-managed)
     CREATE TABLE IF NOT EXISTS data_sources (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      file_name varchar(255) NOT NULL,
+      name varchar(255) NOT NULL,
       type data_source_type NOT NULL,
+      include_patterns text[],
+      exclude_patterns text[],
       created_by uuid,
       created_at timestamptz DEFAULT now(),
       metadata jsonb DEFAULT '{}'
