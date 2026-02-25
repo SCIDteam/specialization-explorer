@@ -32,7 +32,7 @@ def get_user_sessions(db_connection, user_id, limit=50, offset=0):
     try:
         with db_connection.cursor(cursor_factory=RealDictCursor) as cur:
             cur.execute("""
-                SELECT id, user_id, title, created_at, last_active_at, metadata
+                SELECT id, user_id, title, created_at, last_active_at
                 FROM chat_sessions
                 WHERE user_id = %s
                 ORDER BY last_active_at DESC
