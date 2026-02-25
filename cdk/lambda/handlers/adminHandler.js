@@ -175,7 +175,7 @@ exports.handler = async (event) => {
         break;
       }
 
-      // GET /admin/system-messages - Fetch all system messages with version history
+      // Fetch all system messages with version history
       case "GET /admin/system-messages": {
         const rows = await sqlConnection`
           SELECT
@@ -217,7 +217,7 @@ exports.handler = async (event) => {
         break;
       }
 
-      // POST /admin/system-messages/{system_message_type} - Create new system message version + set active
+      // Create new system message version + set active
       case "POST /admin/system-messages/{system_message_type}": {
         let body;
         try {
@@ -344,6 +344,150 @@ exports.handler = async (event) => {
           console.error("POST /admin/system-messages/{system_message_type} failed:", err);
           response.statusCode = 500;
           response.body = JSON.stringify({ error: "Failed to create system message version" });
+          break;
+        }
+      }
+
+      // Delete a non-active system message version
+      case "DELETE /admin/system-messages/{system_message_type}/{version_id}": {
+        let body;
+        try {
+          body = parseBody(event.body);
+        } catch (error) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: error.message });
+          break;
+        }
+
+        const messageType = event?.pathParameters?.system_message_type;
+        const versionId = event?.pathParameters?.version_id;
+
+        const allowedTypes = new Set([
+          "disclaimer",
+          "guardrails",
+          "system_role",
+          "system_checklist",
+          "system_instructions",
+          "initial_prompt",
+          "detective_phase_prompt",
+          "suggestion_phase_prompt",
+          "welcome_message",
+        ]);
+
+        // Validate path params
+        if (!messageType || typeof messageType !== "string" || !allowedTypes.has(messageType)) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({
+            error: "Invalid system_message_type",
+            allowed: Array.from(allowedTypes),
+          });
+          break;
+        }
+
+        if (!versionId || typeof versionId !== "string") {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "version_id is required" });
+          break;
+        }
+
+        // validate
+        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        if (!adminEmail) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "adminEmail is required" });
+          break;
+        }
+
+        // Find admin user id
+        const adminRows = await sqlConnection`
+          SELECT id, email, role
+          FROM users
+          WHERE email = ${adminEmail}
+          LIMIT 1
+        `;
+
+        if (adminRows.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          break;
+        }
+
+        if (adminRows[0].role !== "admin") {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "User is not an admin" });
+          break;
+        }
+
+        try {
+          const deleted = await sqlConnection.begin(async (tx) => {
+            const targetRows = await tx`
+              SELECT id, type, version, is_active
+              FROM system_messages
+              WHERE id = ${versionId}
+                AND type = ${messageType}::system_message_type
+              FOR UPDATE
+            `;
+
+            if (targetRows.length === 0) {
+              return { kind: "not_found" };
+            }
+
+            const target = targetRows[0];
+
+            if (target.is_active) {
+              return { kind: "active_forbidden", version: target.version };
+            }
+
+            const removed = await tx`
+              DELETE FROM system_messages
+              WHERE id = ${versionId}
+                AND type = ${messageType}::system_message_type
+              RETURNING id, type, version
+            `;
+
+            if (removed.length === 0) {
+              return { kind: "not_found" };
+            }
+
+            return {
+              kind: "deleted",
+              id: removed[0].id,
+              type: removed[0].type,
+              version: removed[0].version,
+            };
+          });
+
+          if (deleted.kind === "not_found") {
+            response.statusCode = 404;
+            response.body = JSON.stringify({
+              error: "System message version not found for given type/version_id",
+            });
+            break;
+          }
+
+          if (deleted.kind === "active_forbidden") {
+            response.statusCode = 400;
+            response.body = JSON.stringify({
+              error: "Cannot delete the active version",
+              version: deleted.version,
+            });
+            break;
+          }
+
+          response.statusCode = 200;
+          response.body = JSON.stringify({
+            success: true,
+            deleted: {
+              id: deleted.id,
+              type: deleted.type,
+              version: deleted.version,
+            },
+          });
+          break;
+        } catch (err) {
+          console.error("DELETE /admin/system-messages/{system_message_type}/{version_id} failed:", err);
+          response.statusCode = 500;
+          response.body = JSON.stringify({ error: "Failed to delete system message version" });
           break;
         }
       }

@@ -653,6 +653,117 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /admin/system-messages/{system_message_type}/{version_id}:
+    <<: *commonOptions
+    delete:
+      tags:
+        - Admin
+      summary: Delete a non-active system message version
+      operationId: delete_admin_system_message_version
+      security:
+        - adminAuthorizer: []
+      parameters:
+        - name: system_message_type
+          in: path
+          required: true
+          description: The system message type that the version belongs to
+          schema:
+            type: string
+            enum:
+              - disclaimer
+              - guardrails
+              - system_role
+              - system_checklist
+              - system_instructions
+              - initial_prompt
+              - detective_phase_prompt
+              - suggestion_phase_prompt
+              - welcome_message
+        - name: version_id
+          in: path
+          required: true
+          description: UUID of the system message version row to delete
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - adminEmail
+              properties:
+                adminEmail:
+                  type: string
+                  format: email
+                  description: Email of the admin performing the delete (used to validate admin access)
+                  example: "admin@example.com"
+      responses:
+        "200":
+          description: System message version deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - deleted
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  deleted:
+                    type: object
+                    required:
+                      - id
+                      - type
+                      - version
+                    properties:
+                      id:
+                        type: string
+                        format: uuid
+                      type:
+                        type: string
+                        enum:
+                          - disclaimer
+                          - guardrails
+                          - system_role
+                          - system_checklist
+                          - system_instructions
+                          - initial_prompt
+                          - detective_phase_prompt
+                          - suggestion_phase_prompt
+                          - welcome_message
+                      version:
+                        type: integer
+                        minimum: 1
+              examples:
+                example:
+                  value:
+                    success: true
+                    deleted:
+                      id: "2f0d8c1a-3e2e-4c5d-9c86-1f0a4f1c0d11"
+                      type: "disclaimer"
+                      version: 2
+        "400":
+          description: Bad Request - Invalid type/version_id/adminEmail, or attempted to delete active version
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden - Not an admin
+        "404":
+          description: Admin user not found or system message version not found
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
   # DEPRECATED since no longer needed in new project --> will delete later
   /admin/settings/token-limit:
     <<: *commonOptions
