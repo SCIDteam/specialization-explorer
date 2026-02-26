@@ -1,12 +1,12 @@
 import json
 import logging
-from db import get_db_connection
-from crud import get_users, get_user_sessions, get_session_messages
+from helpers.db import get_db_connection
+from helpers.crud import get_users, get_user_sessions, get_session_messages
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
-def handler(event, context):
+def handler(event, context=None):
     try:
         http_method = event.get('httpMethod')
         path = event.get('path', '')
