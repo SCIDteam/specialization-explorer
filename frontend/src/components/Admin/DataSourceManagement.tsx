@@ -65,122 +65,18 @@ type DataSourceRow = {
 type IngestionRunRow = {
   id: string;
   data_source_id: string;
-  status: "completed" | "failed" | "running" | "queued";
+  status: "completed" | "failed" | "running";
   error_message?: string | null;
   created_at: string;
   completed_at?: string | null;
 };
 
-// --- MOCK DATA SOURCES (from your SQL output) ---
-const MOCK_DATA_SOURCES: DataSourceRow[] = [
-  {
-    id: "10000000-0000-0000-0000-000000000001",
-    name: "alumni_data_final.csv",
-    type: "csv",
-    created_at: "2026-02-05T22:51:03Z",
-    metadata: {},
-  },
-  {
-    id: "10000000-0000-0000-0000-000000000002",
-    name: "alumni_data_final.csv.metadata.json",
-    type: "json",
-    created_at: "2026-02-06T00:43:41Z",
-    metadata: { },
-  },
-  {
-    id: "10000000-0000-0000-0000-000000000003",
-    name: "https://students.ubc.ca/career/your-degree/science/",
-    type: "website",
-    created_at: "2026-02-12T17:43:00Z",
-    metadata: {},
-    include_patterns: [
-      "^https:\\/\\/students\\.ubc\\.ca\\/career\\/your-degree\\/science\\/.*",
-    ],
-    exclude_patterns: [],
-  },
-  {
-    id: "10000000-0000-0000-0000-000000000004",
-    name: "https://vancouver.calendar.ubc.ca/course-descriptions/institution/120",
-    type: "website",
-    created_at: "2026-02-10T22:44:00Z",
-    metadata: {},
-    include_patterns: [
-      "^https:\\/\\/vancouver\\.calendar\\.ubc\\.ca\\/course-descriptions\\/institution\\/120.*",
-      "^https:\\/\\/vancouver\\.calendar\\.ubc\\.ca\\/course-descriptions\\/subject\\/(asic|astr|atsc|bioc|biol|biot|chem|cogs|cpsc|dsci|eosc|envr|fish|gsat|isci|math|micb|phys|stat|zool|scie)v.*",
-    ],
-    exclude_patterns: [],
-  },
-  {
-    id: "10000000-0000-0000-0000-000000000005",
-    name: "https://vancouver.calendar.ubc.ca/faculties-colleges-and-schools/faculty-science/bachelor-science",
-    type: "website",
-    created_at: "2026-02-06T23:59:00Z",
-    metadata: {},
-    include_patterns: [
-      "^https:\\/\\/vancouver\\.calendar\\.ubc\\.ca\\/faculties-colleges-and-schools\\/faculty-science\\/bachelor-science$",
-      "^https:\\/\\/vancouver\\.calendar\\.ubc\\.ca\\/faculties-colleges-and-schools\\/faculty-science\\/bachelor-science\\/(astronomy|atmospheric-science|behavioural-neuroscience|biochemistry|biology|biotechnology|botany|cellular-and-physiological-sciences|chemistry|cognitive-systems|combined-major-in-science|computer-science|data-science|earth-and-ocean-sciences|environmental-sciences|forensic-science|general-science|geographical-sciences|geological-sciences|geophysics|integrated-sciences|mathematics|microbiology-and-immunology|neuroscience|oceanography|pharmacology|physics|statistics|zoology|double-major-and-dual-degree-options|minor-options|introduction-degree-options)$",
-    ],
-    exclude_patterns: [],
-  },
-  {
-    id: "10000000-0000-0000-0000-000000000006",
-    name: "https://science.ubc.ca/programs",
-    type: "website",
-    created_at: "2026-02-05T23:56:00Z",
-    metadata: {},
-    include_patterns: [
-      "^https:\\/\\/science\\.ubc\\.ca\\/programs\\/?$",
-      "^https:\\/\\/science\\.ubc\\.ca\\/students\\/programs\\/(astronomy|atmospheric-science|biochemistry|biology|biophysics|biotechnology|botany|cellular-anatomical-physiological-sciences|chemistry|cognitive-systems|combined-major-science|computer-science|data-science|earth-and-ocean-sciences|environmental-sciences|forensic-science|geographical-sciences|geological-sciences|geophysics|integrated-sciences|mathematics|microbiology-and-immunology|neuroscience|oceanography|pharmacology|physics|statistics|zoology)$",
-    ],
-    exclude_patterns: [],
-  },
-];
-
-// --- MOCK INGESTION RUNS (from your SQL output) ---
-const MOCK_INGESTION_RUNS: IngestionRunRow[] = [
-  {
-    id: "20000000-0000-0000-0000-000000000001",
-    data_source_id: "10000000-0000-0000-0000-000000000001",
-    status: "completed",
-    created_at: "2026-02-05T22:51:03Z",
-    completed_at: "2026-02-06T00:51:03Z",
-  },
-  {
-    id: "20000000-0000-0000-0000-000000000002",
-    data_source_id: "10000000-0000-0000-0000-000000000002",
-    status: "completed",
-    created_at: "2026-02-06T00:43:41Z",
-    completed_at: "2026-02-06T02:43:41Z",
-  },
-  {
-    id: "20000000-0000-0000-0000-000000000003",
-    data_source_id: "10000000-0000-0000-0000-000000000003",
-    status: "completed",
-    created_at: "2026-02-12T17:43:00Z",
-    completed_at: "2026-02-12T18:02:00Z",
-  },
-  {
-    id: "20000000-0000-0000-0000-000000000004",
-    data_source_id: "10000000-0000-0000-0000-000000000004",
-    status: "completed",
-    created_at: "2026-02-10T22:44:00Z",
-    completed_at: "2026-02-10T22:56:00Z",
-  },
-  {
-    id: "20000000-0000-0000-0000-000000000005",
-    data_source_id: "10000000-0000-0000-0000-000000000005",
-    status: "completed",
-    created_at: "2026-02-06T23:59:00Z",
-    completed_at: "2026-02-07T03:40:00Z",
-  },
-  {
-    id: "20000000-0000-0000-0000-000000000006",
-    data_source_id: "10000000-0000-0000-0000-000000000006",
-    status: "completed",
-    created_at: "2026-02-05T23:56:00Z",
-    completed_at: "2026-02-06T04:09:00Z",
-  },
-];
+type AdminDataSourcesResponse = {
+  items: Array<{
+    data_source: DataSourceRow;
+    latest_ingestion_run: IngestionRunRow | null;
+  }>;
+};
 
 function formatDateTime(iso?: string | null) {
   if (!iso) return "—";
@@ -204,8 +100,6 @@ function statusBadge(status: IngestionRunRow["status"] | "no_runs") {
       return <Badge className="bg-red-100 text-red-700">Failed</Badge>;
     case "running":
       return <Badge className="bg-blue-100 text-blue-700">Running</Badge>;
-    case "queued":
-      return <Badge className="bg-gray-100 text-gray-700">Queued</Badge>;
     default:
       return <Badge className="bg-gray-100 text-gray-700">No runs</Badge>;
   }
@@ -236,8 +130,8 @@ export default function DataSourceManagement() {
     questions: 0,
   });
 
-  const [dataSources] = useState<DataSourceRow[]>(MOCK_DATA_SOURCES);
-  const [ingestionRuns] = useState<IngestionRunRow[]>(MOCK_INGESTION_RUNS);
+  const [dataSources, setDataSources] = useState<DataSourceRow[]>([]);
+  const [ingestionRuns, setIngestionRuns] = useState<IngestionRunRow[]>([]);
 
   // shows subrow
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -279,9 +173,50 @@ export default function DataSourceManagement() {
     }
   };
 
+  const fetchAdminDataSources = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      const res = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/data_sources`,
+        {
+          headers: {
+            Authorization: token,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!res.ok) throw new Error("Failed to fetch data sources");
+
+      const data = (await res.json()) as AdminDataSourcesResponse;
+
+      // flatten into the same shapes your UI already expects
+      const ds = data.items.map((x) => x.data_source);
+      const runs = data.items
+        .map((x) => x.latest_ingestion_run)
+        .filter((r): r is IngestionRunRow => !!r);
+
+      setDataSources(ds);
+      setIngestionRuns(runs);
+
+      // if later you return pagination, set it here
+      // if (data.pagination) setPagination(data.pagination);
+    } catch (e) {
+      console.error(e);
+      setError("Failed to load data sources");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchAnalyticsTotals();
-    // later you’ll also fetch data sources here
+    fetchAdminDataSources();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -740,40 +675,17 @@ export default function DataSourceManagement() {
                   <TableHead className="w-[8%] text-right">Delete</TableHead>
                 </TableRow>
               </TableHeader>
-              {/* <TableBody> */}
-                {/* TODO: having loading logic and call endpoints */}
-                {/* {loading ? ( */}
-                {/* {false ? (
+              <TableBody>
+                {loading ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-[#2c5f7c]"></div>
-                        <span className="text-gray-500">
-                          Loading data sources...
-                        </span>
+                    <TableCell colSpan={6} className="py-10">
+                      <div className="flex items-center justify-center gap-2 text-gray-500">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Loading data sources...</span>
                       </div>
                     </TableCell>
                   </TableRow>
-                ) :
-                  <TableRow>
-                    <TableCell className="text-black-400 italic">https://example.com/</TableCell>
-                    <TableCell className="text-black-400 italic">Web </TableCell>
-                    <TableCell className="text-black-400 italic">Successful</TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-green-500" disabled>
-                        <RefreshCw className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-red-500" disabled>
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                } */}
-              {/* </TableBody> */}
-              <TableBody>
-                {visibleDataSources.length === 0 ? (
+                ) : visibleDataSources.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center py-10 text-gray-500">
                       No data sources found.
@@ -790,10 +702,7 @@ export default function DataSourceManagement() {
 
                     return (
                       <>
-                        <TableRow
-                          key={ds.id}
-                          className={isOpen ? "bg-gray-50/50" : ""}
-                        >
+                        <TableRow key={ds.id} className={isOpen ? "bg-gray-50/50" : ""}>
                           <TableCell className="align-top">
                             <div className="flex items-start gap-2">
                               {isExpandable ? (
@@ -898,8 +807,6 @@ export default function DataSourceManagement() {
                                 </div>
                               ) : ds.type === "csv" ? (
                                 (() => {
-                                  const csvRun = latestRunBySourceId.get(ds.id);
-                                  const csvStatus = csvRun?.status ?? "no_runs";
 
                                   const json = jsonByCsvName.get(ds.name);
                                   const jsonRun = json ? latestRunBySourceId.get(json.id) : undefined;
