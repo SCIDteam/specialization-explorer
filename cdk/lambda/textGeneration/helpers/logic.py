@@ -17,7 +17,7 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int]:
         retrieval_count = 1 
     else:
         phase_instructions = config.SUGGESTION_PHASE_PROMPT
-        retrieval_count = 5
+        retrieval_count = 8
 
     # 3. Construct full prompt
     full_prompt = f"""
@@ -31,7 +31,7 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int]:
 
 {config.INSTRUCTIONS}
 
-{config.SPEC_PROMPT} #TODO: update the spec list and spec prompt to fetch from the Database
+{config.SPEC_PROMPT}
 """.strip()
 
     return full_prompt, retrieval_count

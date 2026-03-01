@@ -485,7 +485,7 @@ export class ApiGatewayStack extends cdk.Stack {
           },
           statement: {
             rateBasedStatement: {
-              limit: 50, // Very strict for AI generation endpoints
+              limit: 20, // 20 reqs / 5 mins prevents bots while allowing fast human chat
               aggregateKeyType: "IP",
               scopeDownStatement: {
                 // Apply to practice_materials and chat_sessions endpoints
@@ -533,6 +533,17 @@ export class ApiGatewayStack extends cdk.Stack {
           },
         },
       ],
+    });
+
+    // Custom Response for WAF Blocks (Returns 429 instead of 403)
+    this.api.addGatewayResponse(`${id}-WafBlockResponse`, {
+      type: apigateway.ResponseType.WAF_FILTERED,
+      statusCode: "429",
+      templates: {
+        "application/json": JSON.stringify({
+          error: "Rate limit exceeded. Please wait a few minutes before chatting again."
+        })
+      }
     });
     const wafAssociation = new wafv2.CfnWebACLAssociation(
       this,
@@ -1570,6 +1581,37 @@ export class ApiGatewayStack extends cdk.Stack {
     const cfnLambda_admin = lambdaAdminFunction.node
       .defaultChild as lambda.CfnFunction;
     cfnLambda_admin.overrideLogicalId("adminFunction");
+
+    const lambdaAdminChatHistoryFunction = new lambda.Function(
+      this,
+      `${id}-adminChatHistoryFunction`,
+      {
+        runtime: lambda.Runtime.PYTHON_3_12,
+        code: lambda.Code.fromAsset("lambda/adminChatHistory"),
+        handler: "main.handler",
+        timeout: Duration.seconds(30),
+        vpc: vpcStack.vpc,
+        environment: {
+          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
+          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
+          REGION: this.region,
+        },
+        functionName: `${id}-adminChatHistoryFunction`,
+        memorySize: 512,
+        layers: [psycopgLayer],
+        role: lambdaRole,
+      }
+    );
+
+    lambdaAdminChatHistoryFunction.addPermission("AllowApiGatewayInvoke", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin*`,
+    });
+
+    const cfnLambda_adminChatHistory = lambdaAdminChatHistoryFunction.node
+      .defaultChild as lambda.CfnFunction;
+    cfnLambda_adminChatHistory.overrideLogicalId("adminChatHistoryFunction");
 
     const lambdaPromptTemplateFunction = new lambda.Function(
       this,

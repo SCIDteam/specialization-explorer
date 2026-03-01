@@ -10,7 +10,7 @@ import helpers.config as config
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-def handler(event, context):
+def handler(event, context=None):
     logger.info("Event: %s", json.dumps(event))
     
     body = {}

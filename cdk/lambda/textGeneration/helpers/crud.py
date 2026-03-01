@@ -149,7 +149,8 @@ def fetch_system_config(db_connection) -> Dict[str, Any]:
                        max_characters_per_user_message,
                        max_characters_per_ai_message,
                        temperature,
-                       top_p
+                       top_p,
+                       specialization_list
                 FROM system_settings
                 ORDER BY updated_at DESC
                 LIMIT 1
@@ -162,10 +163,10 @@ def fetch_system_config(db_connection) -> Dict[str, Any]:
                     'max_characters_per_user_message': row[2],
                     'max_characters_per_ai_message': row[3],
                     'temperature': float(row[4]) if row[4] is not None else 0.7,
-                    'top_p': float(row[5]) if row[5] is not None else 0.9
+                    'top_p': float(row[5]) if row[5] is not None else 0.9, 
+                    'specialization_list': row[6]
                 }
     except Exception as e:
         logger.error(f"fetch_system_config failed: {e}")
         # Return what we have (empty or partial)
-    
     return config
