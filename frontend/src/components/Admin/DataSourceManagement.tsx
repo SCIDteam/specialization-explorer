@@ -17,7 +17,6 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -212,14 +211,6 @@ function statusBadge(status: IngestionRunRow["status"] | "no_runs") {
   }
 }
 
-function prettyJson(obj: Record<string, unknown> | undefined) {
-  try {
-    return JSON.stringify(obj ?? {}, null, 2);
-  } catch {
-    return "{}";
-  }
-}
-
 export default function DataSourceManagement() {
   const [isUrlDialogOpen, setIsUrlDialogOpen] = useState(false);
   const [webUrl, setWebUrl] = useState("");
@@ -253,13 +244,6 @@ export default function DataSourceManagement() {
 
   const [includePatternsText, setIncludePatternsText] = useState("");
   const [excludePatternsText, setExcludePatternsText] = useState("");
-
-  function parsePatterns(text: string): string[] {
-    return (text ?? "")
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
 
   const fetchAnalyticsTotals = async () => {
     try {
