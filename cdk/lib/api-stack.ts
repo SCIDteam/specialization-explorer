@@ -1261,6 +1261,71 @@ export class ApiGatewayStack extends cdk.Stack {
       })
     );
 
+    // --- Knowledge Base Lambda Function ---
+    const lambdaKnowledgeBase = new lambda.Function(this, `${id}-lambdaKnowledgeBase`, {
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: "main.handler",
+      code: lambda.Code.fromAsset("lambda/knowledgeBase"),
+      timeout: Duration.seconds(300),
+      memorySize: 512,
+      vpc: vpcStack.vpc,
+      role: lambdaRole,
+      environment: {
+        REGION: this.region,
+      },
+    });
+
+    const cfnLambdaKnowledgeBase = lambdaKnowledgeBase.node.defaultChild as lambda.CfnFunction;
+    cfnLambdaKnowledgeBase.overrideLogicalId("lambdaKnowledgeBase");
+
+    lambdaKnowledgeBase.addPermission("AllowApiGatewayInvoke", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/knowledge_base*`,
+    });
+
+    lambdaKnowledgeBase.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`],
+      })
+    );
+
+    lambdaKnowledgeBase.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "s3:ListBucket",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+        ],
+        resources: [
+          "arn:aws:s3:::*",
+          "arn:aws:s3:::*/*",
+        ],
+      })
+    );
+
+    lambdaKnowledgeBase.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "bedrock:ListDataSources",
+          "bedrock:GetDataSource",
+          "bedrock:CreateDataSource",
+          "bedrock:UpdateDataSource",
+          "bedrock:ListIngestionJobs",
+          "bedrock:GetIngestionJob",
+          "bedrock:StartIngestionJob",
+        ],
+        resources: [
+          `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
+          `arn:aws:bedrock:${this.region}:${this.account}:*`,
+        ],
+      })
+    );
 
     const lambdaUserFunction = new lambda.Function(this, `${id}-userFunction`, {
       runtime: lambda.Runtime.NODEJS_22_X,
