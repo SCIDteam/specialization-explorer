@@ -1,4 +1,5 @@
 
+import boto3.exceptions
 import json
 import logging
 import os
@@ -6,6 +7,7 @@ import boto3
 from helpers.chat import get_response
 from helpers.db_connection import get_db_connection
 import helpers.config as config
+from helpers.session_security import validate_session_ownership, sanitize_session_id
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -42,10 +44,28 @@ def handler(event, context=None):
             'body': json.dumps({'error': 'Missing query or chat_session_id'})
         }
 
+    # Sanitize session ID before querying DB
+    try: 
+        chat_session_id = sanitize_session_id(chat_session_id)
+    except ValueError as e: 
+        logger.error(f"Invalid session ID: {e}")
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': 'Invalid session ID'})
+        }
+
     conn = None
     try:
         conn = get_db_connection()
         conn.autocommit = False
+
+        # Validate the session ownership before doing anything with the session 
+        if user_id: 
+            if not validate_session_ownership(conn, chat_session_id, user_id): 
+                return {
+                    'statusCode': 403,
+                    'body': json.dumps({'error': 'Unauthorized access to chat session'})
+                }
         
         # Load dynamic configuration from DB
         config.load_config(conn)
