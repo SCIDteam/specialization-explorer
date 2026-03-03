@@ -39,7 +39,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { AuthService } from "@/functions/authService";
 import MetricCard from "@/components/Admin/MetricCard";
-import CloudWatchLogsViewer from "@/components/Admin/CloudWatchLogsViewer";
 
 type TextbookDetails = {
   id: string;
@@ -257,8 +256,7 @@ export default function TextbookDetailsPage() {
       const token = session.tokens.idToken;
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
+        `${import.meta.env.VITE_API_ENDPOINT
         }/admin/textbooks/${id}/analytics?timeRange=${timeRange}`,
         {
           headers: {
@@ -287,8 +285,7 @@ export default function TextbookDetailsPage() {
       const token = session.tokens.idToken;
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
+        `${import.meta.env.VITE_API_ENDPOINT
         }/admin/textbooks/${id}/practice_analytics`,
         {
           headers: {
@@ -319,8 +316,7 @@ export default function TextbookDetailsPage() {
       const token = session.tokens.idToken;
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
+        `${import.meta.env.VITE_API_ENDPOINT
         }/admin/textbooks/${id}/faqs?limit=50&offset=${offset}`,
         {
           headers: {
@@ -364,8 +360,7 @@ export default function TextbookDetailsPage() {
       const token = session.tokens.idToken;
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
+        `${import.meta.env.VITE_API_ENDPOINT
         }/admin/textbooks/${id}/shared_prompts?limit=50&offset=${offset}`,
         {
           headers: {
@@ -412,8 +407,7 @@ export default function TextbookDetailsPage() {
       const token = session.tokens.idToken;
 
       const response = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
+        `${import.meta.env.VITE_API_ENDPOINT
         }/admin/textbooks/${id}/ingestion_status?limit=100&offset=${offset}`,
         {
           headers: {
@@ -451,7 +445,7 @@ export default function TextbookDetailsPage() {
     if (ingestionStatus?.media_pagination?.hasMore) {
       fetchIngestionStatus(
         ingestionStatus.media_pagination.offset +
-          ingestionStatus.media_pagination.limit,
+        ingestionStatus.media_pagination.limit,
         true
       );
     }
@@ -556,11 +550,10 @@ export default function TextbookDetailsPage() {
             </p>
             <Badge
               variant={textbook.status === "Active" ? "default" : "secondary"}
-              className={`mt-3 ${
-                textbook.status === "Active"
-                  ? "bg-green-100 text-green-700 hover:bg-green-100"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-100"
-              }`}
+              className={`mt-3 ${textbook.status === "Active"
+                ? "bg-green-100 text-green-700 hover:bg-green-100"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-100"
+                }`}
             >
               {textbook.status}
             </Badge>
@@ -569,11 +562,10 @@ export default function TextbookDetailsPage() {
           <nav className="p-4 space-y-1">
             <Button
               variant={activeView === "analytics" ? "secondary" : "ghost"}
-              className={`w-full justify-start ${
-                activeView === "analytics"
-                  ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-                  : "text-gray-600"
-              }`}
+              className={`w-full justify-start ${activeView === "analytics"
+                ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+                : "text-gray-600"
+                }`}
               onClick={() => setActiveView("analytics")}
             >
               <BarChart3 className="mr-2 h-4 w-4" />
@@ -581,11 +573,10 @@ export default function TextbookDetailsPage() {
             </Button>
             <Button
               variant={activeView === "practice" ? "secondary" : "ghost"}
-              className={`w-full justify-start ${
-                activeView === "practice"
-                  ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-                  : "text-gray-600"
-              }`}
+              className={`w-full justify-start ${activeView === "practice"
+                ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+                : "text-gray-600"
+                }`}
               onClick={() => setActiveView("practice")}
             >
               <BookOpen className="mr-2 h-4 w-4" />
@@ -593,11 +584,10 @@ export default function TextbookDetailsPage() {
             </Button>
             <Button
               variant={activeView === "faq" ? "secondary" : "ghost"}
-              className={`w-full justify-start ${
-                activeView === "faq"
-                  ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-                  : "text-gray-600"
-              }`}
+              className={`w-full justify-start ${activeView === "faq"
+                ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+                : "text-gray-600"
+                }`}
               onClick={() => setActiveView("faq")}
             >
               <MessageSquare className="mr-2 h-4 w-4" />
@@ -605,11 +595,10 @@ export default function TextbookDetailsPage() {
             </Button>
             <Button
               variant={activeView === "status" ? "secondary" : "ghost"}
-              className={`w-full justify-start ${
-                activeView === "status"
-                  ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
-                  : "text-gray-600"
-              }`}
+              className={`w-full justify-start ${activeView === "status"
+                ? "bg-[#2c5f7c]/10 text-[#2c5f7c] font-medium"
+                : "text-gray-600"
+                }`}
               onClick={() => setActiveView("status")}
             >
               <FileVideo className="mr-2 h-4 w-4" />
@@ -809,10 +798,10 @@ export default function TextbookDetailsPage() {
                             (a, b) => b.count - a.count
                           )[0]
                             ? formatMaterialType(
-                                practiceAnalytics.by_type.sort(
-                                  (a, b) => b.count - a.count
-                                )[0].material_type
-                              )
+                              practiceAnalytics.by_type.sort(
+                                (a, b) => b.count - a.count
+                              )[0].material_type
+                            )
                             : "N/A"
                         }
                         icon={
@@ -1133,15 +1122,15 @@ export default function TextbookDetailsPage() {
                           ingestionStatus.job_status === "done"
                             ? "default"
                             : ingestionStatus.job_status === "failed"
-                            ? "destructive"
-                            : "secondary"
+                              ? "destructive"
+                              : "secondary"
                         }
                         className={
                           ingestionStatus.job_status === "done"
                             ? "bg-green-100 text-green-700"
                             : ingestionStatus.job_status === "running"
-                            ? "bg-blue-100 text-blue-700"
-                            : ""
+                              ? "bg-blue-100 text-blue-700"
+                              : ""
                         }
                       >
                         {ingestionStatus.job_status.toUpperCase()}
@@ -1159,21 +1148,20 @@ export default function TextbookDetailsPage() {
                   <div onClick={() => textbook?.source_url && window.open(textbook.source_url, "_blank")} className={textbook?.source_url ? "cursor-pointer" : ""}>
                     <MetricCard
                       title="Sections Ingested"
-                      value={`${ingestionStatus?.ingested_sections || 0}/${
-                        ingestionStatus?.total_sections || 0
-                      }`}
+                      value={`${ingestionStatus?.ingested_sections || 0}/${ingestionStatus?.total_sections || 0
+                        }`}
                       icon={<CheckCircle2 className="h-5 w-5 text-green-600" />}
                       trend={
                         ingestionStatus?.ingested_sections ===
                           ingestionStatus?.total_sections &&
-                        (ingestionStatus?.total_sections || 0) > 0
+                          (ingestionStatus?.total_sections || 0) > 0
                           ? "Fully Ingested"
                           : "In Progress"
                       }
                       tooltip="Number of sections successfully processed and indexed out of the total sections found in the textbook. Click to view textbook source."
                     />
                   </div>
-                  <div 
+                  <div
                     onClick={() => {
                       const mediaSection = document.getElementById('associated-media-section');
                       mediaSection?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1188,102 +1176,100 @@ export default function TextbookDetailsPage() {
                       tooltip="Total number of images extracted from the textbook content and indexed. Click to view associated media."
                     />
                   </div>
-                </div>
-                {/* CloudWatch Logs Viewer */}
-                {id && <CloudWatchLogsViewer textbookId={id} />}
-                <div id="associated-media-section">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                    Associated Media (
-                    {ingestionStatus?.media_items?.length || 0} items)
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {ingestionStatus?.media_items &&
-                    ingestionStatus.media_items.length > 0 ? (
-                      ingestionStatus.media_items.map(
-                        (item: MediaItem, i: number) => (
-                          <Card key={item.id}>
-                            <CardContent className="p-4 flex items-center justify-between">
-                              <div className="flex items-center gap-4">
-                                <div className="h-12 w-12 rounded-lg bg-blue-100 flex items-center justify-center overflow-hidden shrink-0">
-                                  {item.media_type === "image" && item.url ? (
-                                    <img
-                                      src={item.url}
-                                      alt={item.description || "Media"}
-                                      className="h-full w-full object-cover"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                      }}
-                                    />
-                                  ) : (
-                                    <FileVideo className="h-6 w-6 text-blue-600" />
-                                  )}
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex items-center gap-2">
-                                    <p className="font-medium text-gray-900 line-clamp-1">
-                                      {item.description ||
-                                        `${item.media_type} ${i + 1}`}
-                                    </p>
-                                    <Badge
-                                      variant="outline"
-                                      className="text-[10px] shrink-0"
-                                    >
-                                      {item.media_type}
-                                    </Badge>
+                  <div id="associated-media-section">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                      Associated Media (
+                      {ingestionStatus?.media_items?.length || 0} items)
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {ingestionStatus?.media_items &&
+                        ingestionStatus.media_items.length > 0 ? (
+                        ingestionStatus.media_items.map(
+                          (item: MediaItem, i: number) => (
+                            <Card key={item.id}>
+                              <CardContent className="p-4 flex items-center justify-between">
+                                <div className="flex items-center gap-4">
+                                  <div className="h-12 w-12 rounded-lg bg-blue-100 flex items-center justify-center overflow-hidden shrink-0">
+                                    {item.media_type === "image" && item.url ? (
+                                      <img
+                                        src={item.url}
+                                        alt={item.description || "Media"}
+                                        className="h-full w-full object-cover"
+                                        onError={(e) => {
+                                          e.currentTarget.style.display = "none";
+                                        }}
+                                      />
+                                    ) : (
+                                      <FileVideo className="h-6 w-6 text-blue-600" />
+                                    )}
                                   </div>
-                                  <p className="text-sm text-gray-500 truncate">
-                                    Chapter {item.chapter_number}:{" "}
-                                    {item.chapter_title || "Unknown"}
-                                  </p>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <p className="font-medium text-gray-900 line-clamp-1">
+                                        {item.description ||
+                                          `${item.media_type} ${i + 1}`}
+                                      </p>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] shrink-0"
+                                      >
+                                        {item.media_type}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm text-gray-500 truncate">
+                                      Chapter {item.chapter_number}:{" "}
+                                      {item.chapter_title || "Unknown"}
+                                    </p>
+                                  </div>
                                 </div>
-                              </div>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => window.open(item.url, "_blank")}
-                                disabled={!item.url}
-                              >
-                                View
-                              </Button>
-                            </CardContent>
-                          </Card>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => window.open(item.url, "_blank")}
+                                  disabled={!item.url}
+                                >
+                                  View
+                                </Button>
+                              </CardContent>
+                            </Card>
+                          )
                         )
-                      )
-                    ) : (
-                      <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-lg border border-dashed">
-                        No media items found for this textbook.
-                      </div>
-                    )}
+                      ) : (
+                        <div className="text-center py-10 text-gray-500 bg-gray-50 rounded-lg border border-dashed">
+                          No media items found for this textbook.
+                        </div>
+                      )}
 
+                    </div>
+
+                    {/* Pagination Controls for Media */}
+                    {ingestionStatus?.media_pagination &&
+                      ingestionStatus.media_items.length > 0 && (
+                        <div className="mt-6 flex flex-col items-center gap-3">
+                          <p className="text-sm text-muted-foreground">
+                            Showing {ingestionStatus.media_items.length} of{" "}
+                            {ingestionStatus.media_pagination.total} media items
+                          </p>
+                          {ingestionStatus.media_pagination.hasMore && (
+                            <Button
+                              onClick={handleLoadMoreMedia}
+                              disabled={loadingMoreMedia}
+                              variant="outline"
+                              className="min-w-[200px]"
+                            >
+                              {loadingMoreMedia ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Loading...
+                                </>
+                              ) : (
+                                "Load More Media"
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      )}
                   </div>
-
-                  {/* Pagination Controls for Media */}
-                  {ingestionStatus?.media_pagination &&
-                    ingestionStatus.media_items.length > 0 && (
-                      <div className="mt-6 flex flex-col items-center gap-3">
-                        <p className="text-sm text-muted-foreground">
-                          Showing {ingestionStatus.media_items.length} of{" "}
-                          {ingestionStatus.media_pagination.total} media items
-                        </p>
-                        {ingestionStatus.media_pagination.hasMore && (
-                          <Button
-                            onClick={handleLoadMoreMedia}
-                            disabled={loadingMoreMedia}
-                            variant="outline"
-                            className="min-w-[200px]"
-                          >
-                            {loadingMoreMedia ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Loading...
-                              </>
-                            ) : (
-                              "Load More Media"
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    )}
                 </div>
               </div>
             )}
