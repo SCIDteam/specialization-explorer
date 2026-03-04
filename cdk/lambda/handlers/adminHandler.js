@@ -1971,7 +1971,7 @@ exports.handler = async (event) => {
           const rows = await sqlConnection`
             SELECT id, email, display_name, role, created_at, last_seen_at
             FROM users
-            ORDER BY last_seen_at DESC NULLS LAST
+            ORDER BY COALESCE(last_seen_at, created_at) DESC
             LIMIT ${limit} OFFSET ${offset}
           `;
 
@@ -2004,7 +2004,7 @@ exports.handler = async (event) => {
             SELECT id, user_id, title, created_at, last_active_at
             FROM chat_sessions
             WHERE user_id = ${userId}
-            ORDER BY last_active_at DESC
+            ORDER BY COALESCE(last_active_at, created_at) DESC
             LIMIT ${limit} OFFSET ${offset}
           `;
 
