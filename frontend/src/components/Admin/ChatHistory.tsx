@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Bot, User, MessageSquare, ChevronDown, ChevronRight, Clock, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Bot, User, MessageSquare, ChevronDown, ChevronRight, Clock } from "lucide-react";
 import { AuthService } from "@/functions/authService";
 import { cn } from "@/lib/utils";
 
