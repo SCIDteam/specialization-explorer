@@ -6,7 +6,6 @@ import { UserProvider } from "./providers/UserContext";
 import HomePage from "./pages/HomePage";
 import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
-import TextbookDetailsPage from "./pages/Admin/TextbookDetailsPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Amplify } from "aws-amplify";
 
@@ -49,14 +48,6 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/textbook/:id"
-              element={
-                <ProtectedRoute>
-                  <TextbookDetailsPage />
                 </ProtectedRoute>
               }
             />

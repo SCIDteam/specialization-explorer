@@ -321,33 +321,6 @@ export class ApiGatewayStack extends cdk.Stack {
             throttlingBurstLimit: 200,
           },
 
-          // MODERATE: Chat endpoints (streaming AI)
-          "/textbooks/*/chat_sessions/POST": {
-            throttlingRateLimit: 20, // 20/sec (down from 100)
-            throttlingBurstLimit: 40,
-          },
-
-          "/textbooks/*/chat_sessions/*/messages/POST": {
-            throttlingRateLimit: 20,
-            throttlingBurstLimit: 40,
-          },
-
-          // CHEAP: Read operations (just database queries)
-          "/textbooks/GET": {
-            throttlingRateLimit: 200, // 200/sec (UP from 100)
-            throttlingBurstLimit: 400,
-          },
-
-          "/textbooks/*/GET": {
-            throttlingRateLimit: 200,
-            throttlingBurstLimit: 400,
-          },
-
-          // MODERATE: FAQ operations
-          "/textbooks/*/faq/POST": {
-            throttlingRateLimit: 10,
-            throttlingBurstLimit: 20,
-          },
 
           // FREQUENT: Public token endpoint
           "/user/publicToken/GET": {
@@ -1429,41 +1402,7 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/system_message*`,
     });
 
-    const lambdaTextbookFunction = new lambda.Function(
-      this,
-      `${id}-textbookFunction`,
-      {
-        runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda"),
-        handler: "handlers/textbookHandler.handler",
-        timeout: Duration.seconds(300),
-        vpc: vpcStack.vpc,
-        environment: {
-          SM_DB_CREDENTIALS: db.secretPathUser.secretName,
-          RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
-        },
-        functionName: `${id}-textbookFunction`,
-        memorySize: 512,
-        layers: [postgres],
-        role: lambdaRole,
-      }
-    );
 
-    lambdaTextbookFunction.addPermission("AllowApiGatewayInvoke", {
-      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
-      action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks*`,
-    });
-
-    lambdaTextbookFunction.addPermission("AllowTestInvoke", {
-      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
-      action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/test-invoke-stage/*/*`,
-    });
-
-    const cfnLambda_textbook = lambdaTextbookFunction.node
-      .defaultChild as lambda.CfnFunction;
-    cfnLambda_textbook.overrideLogicalId("textbookFunction");
 
     // FAQ Lambda Function
     const lambdaFaqFunction = new lambda.Function(this, `${id}-faqFunction`, {
@@ -1482,11 +1421,7 @@ export class ApiGatewayStack extends cdk.Stack {
       role: lambdaRole,
     });
 
-    lambdaFaqFunction.addPermission("AllowApiGatewayInvoke", {
-      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
-      action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks/*/faq*`,
-    });
+
 
     lambdaFaqFunction.addPermission("AllowFaqInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
@@ -1520,11 +1455,7 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    lambdaChatSessionFunction.addPermission("AllowApiGatewayInvoke", {
-      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
-      action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/textbooks/*/chat_sessions*`,
-    });
+
 
     // Allow API Gateway to invoke for shared chat endpoints (public access)
     lambdaChatSessionFunction.addPermission("AllowApiGatewayInvokeShared", {
