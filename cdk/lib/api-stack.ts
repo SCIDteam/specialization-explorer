@@ -38,7 +38,7 @@ export class ApiGatewayStack extends cdk.Stack {
   public readonly apiGW_basedURL: string;
   private eventApi: appsync.GraphqlApi;
   public readonly secret: secretsmanager.ISecret;
-  public getEndpointUrl = () => this.api.url.replace(/\/+$/, '');
+  public getEndpointUrl = () => this.api.url;
   public getUserPoolId = () => this.userPool.userPoolId;
   public getEventApiUrl = () => this.eventApi.graphqlUrl;
   public getUserPoolClientId = () => this.appClient.userPoolClientId;
