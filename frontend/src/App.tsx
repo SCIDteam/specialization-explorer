@@ -6,7 +6,6 @@ import { UserProvider } from "./providers/UserContext";
 import HomePage from "./pages/HomePage";
 import AdminLogin from "./pages/Admin/AdminLogin";
 import AdminDashboard from "./pages/Admin/AdminDashboard";
-import TextbookDetailsPage from "./pages/Admin/TextbookDetailsPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Amplify } from "aws-amplify";
 
@@ -26,41 +25,8 @@ Amplify.configure({
   },
 });
 
-// Pre-warm Lambdas on app load to reduce cold start latency
-// Uses WebSocket to send a warmup action that triggers the practice material Lambda
-async function warmupLambdas() {
-  const apiEndpoint = import.meta.env.VITE_API_ENDPOINT;
-  const wsUrl = import.meta.env.VITE_WEBSOCKET_URL;
 
-  if (!apiEndpoint || !wsUrl) return;
 
-  try {
-    // Get authentication token
-    const tokenResponse = await fetch(`${apiEndpoint}/user/publicToken`);
-    if (!tokenResponse.ok) return;
-
-    const { token } = await tokenResponse.json();
-    if (!token) return;
-
-    // Connect to WebSocket and send warmup action
-    const ws = new WebSocket(`${wsUrl}?token=${token}`);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ action: "warmup" }));
-      // Close connection after sending - we don't need to wait for response
-      setTimeout(() => ws.close(), 1000);
-    };
-
-    ws.onerror = () => {
-      // Ignore errors - warmup is best-effort
-    };
-  } catch {
-    // Ignore errors - warmup is best-effort
-  }
-}
-
-// Call warmup once when module loads
-warmupLambdas();
 
 
 function App() {
@@ -82,14 +48,6 @@ function App() {
               element={
                 <ProtectedRoute>
                   <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/textbook/:id"
-              element={
-                <ProtectedRoute>
-                  <TextbookDetailsPage />
                 </ProtectedRoute>
               }
             />
