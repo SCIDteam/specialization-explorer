@@ -74,7 +74,7 @@ def _prepare_conversation(
     db_connection,
     search_type: Optional[str] = None,
     save_user_message: bool = True
-) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]]]:
+) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], str]:
     """
     Handles validation, history fetching, user msg saving, retrieval, and prompt construction.
     Returns: (bedrock_messages, full_system_prompt, sources)
@@ -110,7 +110,7 @@ def _prepare_conversation(
         raise
 
     # 4. Determine Phase & Prompt
-    current_system_prompt, num_retrieval_results = get_current_prompt(
+    current_system_prompt, num_retrieval_results, phase_name = get_current_prompt(
         chat_session_id,
         db_connection
     )
@@ -164,7 +164,7 @@ def _prepare_conversation(
         "content": [{"text": query}]
     })
 
-    return bedrock_messages, full_system_prompt, sources
+    return bedrock_messages, full_system_prompt, sources, phase_name
 
 
 def _save_ai_response(
@@ -225,7 +225,7 @@ def get_response(
                     "intervention": None
                 }
 
-        bedrock_messages, full_system_prompt, sources = _prepare_conversation(
+        bedrock_messages, full_system_prompt, sources, phase_name = _prepare_conversation(
             query,
             knowledge_base_id,
             bedrock_region,
@@ -268,7 +268,7 @@ def get_response(
         logger.error(f"Generation Failed: {e}")
         answer_text = "I encountered an error generating the response."
 
-    if answer_text and not answer_text.startswith("I encountered an error"):
+    if phase_name == "SUGGESTION" and answer_text and not answer_text.startswith("I encountered an error"):
         try:
             intervention_result = assess_response(
                 query=query,
