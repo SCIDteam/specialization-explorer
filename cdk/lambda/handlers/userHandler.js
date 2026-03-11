@@ -309,6 +309,7 @@ exports.handler = async (event) => {
             sender,
             content,
             sources,
+            warning,
             created_at,
             COUNT(*) OVER() as total_count
           FROM chat_messages

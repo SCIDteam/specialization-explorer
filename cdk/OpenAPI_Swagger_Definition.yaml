@@ -2580,6 +2580,9 @@ paths:
                           type: object
                           nullable: true
                           additionalProperties: true
+                        warning:
+                          type: string
+                          nullable: true
                         created_at:
                           type: string
                           format: date-time
