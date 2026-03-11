@@ -145,7 +145,8 @@ def _prepare_conversation(
 <response_instructions>
 1. Answer the user's question using the retrieved_context if relevant.
 2. If the user is just chatting (e.g. "hello", "thanks"), respond naturally.
-3. ALWAYS ANSWER. Never refuse. If the context is empty, say what you know or ask for clarification.
+3. If the retrieved context does not clearly support the answer, say you do not have enough grounded information and ask a clarifying question.
+4. Do NOT invent course names, requirements, or specialization details that are not supported by the retrieved context.
 </response_instructions>
 """
 
