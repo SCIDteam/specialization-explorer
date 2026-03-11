@@ -160,39 +160,39 @@ const MESSAGE_META: Record<
 > = {
   system_role: {
     title: "System Role",
-    description: "Defines who the assistant is, what it specializes in, and how it should generally behave.",
+    description: "Defines who the assistant is, what it specializes in, and how it should generally behave",
   },
   system_checklist: {
     title: "System Checklist",
-    description: "A list of key points the assistant should cover to fully understand the user’s needs.",
+    description: "A list of key points the assistant should cover to fully understand the user’s needs",
   },
   system_instructions: {
     title: "System Instructions",
-    description: "Guidelines that control how the assistant formats and delivers its responses.",
+    description: "Guidelines that control how the assistant formats and delivers its responses",
   },
   initial_prompt: {
     title: "Initial Prompt",
-    description: "The opening context that sets the direction and purpose of the conversation.",
+    description: "The opening context that sets the direction and purpose of the conversation",
   },
   detective_phase_prompt: {
     title: "Detective Phase Prompt",
-    description: "Instructions for asking the right questions to better understand the user’s situation.",
+    description: "Instructions for asking the right questions to better understand the user’s situation",
   },
   suggestion_phase_prompt: {
     title: "Suggestion Phase Prompt",
-    description: "Guidance for turning gathered information into clear, practical recommendations.",
+    description: "Guidance for turning gathered information into clear, practical recommendations",
   },
   guardrails: {
     title: "Guardrails",
-    description: "Boundaries that keep the assistant focused, appropriate, and within scope.",
+    description: "Boundaries that keep the assistant focused, appropriate, and within scope",
   },
   welcome_message: {
     title: "Welcome Message",
-    description: "The first message shown to greet the user and start the conversation.",
+    description: "The first message shown to greet the user and start the conversation",
   },
   disclaimer: {
     title: "Disclaimer",
-    description: "A short note explaining the limits of the assistant’s advice and responsibility.",
+    description: "A short note explaining the limits of the assistant’s advice and responsibility",
   },
 };
 
@@ -507,7 +507,7 @@ export default function SystemSettings() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="max-messages-per-session">Max messages per session</Label>
+                  <Label htmlFor="max-messages-per-session">Daily Token Limit</Label>
                   <Input
                     id="max-messages-per-session"
                     type="number"
@@ -520,7 +520,7 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500">Hard cap on messages in a single chat session.</p>
+                  <p className="text-xs text-gray-500">Number of tokens a user can send to the LLM per 24 hours. 1 token is roughly 1.33 words</p>
                 </div>
 
                 <div className="space-y-2">
@@ -538,7 +538,7 @@ export default function SystemSettings() {
                     }
                   />
                   <p className="text-xs text-gray-500">
-                    Minimum back-and-forth before suggestion logic can activate.
+                    Minimum back-and-forth before suggestion logic can activate
                   </p>
                 </div>
 
@@ -556,7 +556,7 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500">Reject user messages above this length.</p>
+                  <p className="text-xs text-gray-500">Reject user messages above this length</p>
                 </div>
 
                 <div className="space-y-2">
@@ -573,7 +573,7 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500">Cap AI response length to avoid runaway outputs.</p>
+                  <p className="text-xs text-gray-500">Cap AI response length to avoid runaway outputs</p>
                 </div>
 
                 <div className="space-y-2">
@@ -627,7 +627,7 @@ export default function SystemSettings() {
                       Specializations
                     </h3>
                     <p className="text-sm text-muted-foreground">
-                      Manage the list of available specializations.
+                      Manage the list of available specializations
                     </p>
                   </div>
                   {specsExpanded ? (
