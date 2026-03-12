@@ -7,17 +7,14 @@ import Footer from "@/components/Footer";
 import type { ChatSession } from "@/providers/view";
 import { useUser } from "@/providers/user";
 import { Button } from "@/components/ui/button";
-import { ProfileModal } from "@/components/ProfileModal";
 
 const DEFAULT_WELCOME_MESSAGE =
   "Together we will try to find the right program for you. Click below to start a new conversation:";
 const DEFAULT_DISCLAIMER = "AI can make mistakes. Check important info.";
 
 export default function HomePage() {
-  const { userId, email, metadata } = useUser();
+  const { userId } = useUser();
   const navigate = useNavigate();
-
-  const showProfileModal = userId && !email && metadata?.profile_prompt_skipped !== true;
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
   const [activeChatSessionId, setActiveChatSessionId] = useState<string | null>(
@@ -208,13 +205,7 @@ export default function HomePage() {
       }}
     >
       <SidebarProvider>
-        <div className="flex flex-col min-h-screen bg-background relative">
-          {showProfileModal && (
-            <ProfileModal onDismiss={() => {
-              // The modal updates Context, but locally we just rely on Context changing
-              // Because Context provider triggers re-render, it should vanish automatically.
-            }} />
-          )}
+        <div className="flex flex-col min-h-screen bg-background">
           <SideBar />
           <div className="md:ml-64 flex flex-col flex-1">
             <main className="flex-1 flex flex-col items-center justify-center max-w-screen px-4">
