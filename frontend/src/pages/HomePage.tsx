@@ -7,13 +7,33 @@ import Footer from "@/components/Footer";
 import type { ChatSession } from "@/providers/view";
 import { useUser } from "@/providers/user";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const DEFAULT_WELCOME_MESSAGE =
   "Together we will try to find the right program for you. Click below to start a new conversation:";
 const DEFAULT_DISCLAIMER = "AI can make mistakes. Check important info.";
 
+type UserProfile = {
+  id: string;
+  email: string | null;
+  display_name?: string | null;
+  role?: string;
+  created_at?: string;
+  last_seen_at?: string;
+  tokens_used?: number;
+  token_window_started_at?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
+
 export default function HomePage() {
-  const { userId } = useUser();
+  const { userId, isLoading: isLoadingUser } = useUser();
   const navigate = useNavigate();
 
   const [chatSessions, setChatSessions] = useState<ChatSession[]>([]);
@@ -28,17 +48,33 @@ export default function HomePage() {
   const [disclaimer, setDisclaimer] = useState<string>(DEFAULT_DISCLAIMER);
   const [isLoadingDisclaimer, setIsLoadingDisclaimer] = useState(true);
 
+  // Email / anonymity modal state
+  const [isCheckingUserProfile, setIsCheckingUserProfile] = useState(true);
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [emailChoiceStep, setEmailChoiceStep] = useState<"choice" | "email">(
+    "choice"
+  );
+  const [emailInput, setEmailInput] = useState("");
+  const [isSavingEmail, setIsSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+
+  const getAnonymousChoiceKey = (id: string) => `specEx_anonymous_choice_${id}`;
+
+  const getPublicToken = async () => {
+    const tokenResponse = await fetch(
+      `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
+    );
+    if (!tokenResponse.ok) throw new Error("Failed to get public token");
+    return tokenResponse.json() as Promise<{ token: string }>;
+  };
+
   const fetchSystemMessage = async (
     messageType: string,
     fallback: string,
     setter: (val: string) => void
   ) => {
     try {
-      const tokenResponse = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
-      );
-      if (!tokenResponse.ok) throw new Error("Failed to get public token");
-      const { token } = await tokenResponse.json();
+      const { token } = await getPublicToken();
 
       const response = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/system_message/${messageType}`,
@@ -60,6 +96,79 @@ export default function HomePage() {
     }
   };
 
+  const fetchUserProfile = async (id: string): Promise<UserProfile | null> => {
+    try {
+      const { token } = await getPublicToken();
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/user/${id}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch user profile");
+      }
+
+      return (await response.json()) as UserProfile;
+    } catch (err) {
+      console.error("Error fetching user profile:", err);
+      return null;
+    }
+  };
+
+  const updateUserEmail = async (id: string, email: string) => {
+    const { token } = await getPublicToken();
+
+    const response = await fetch(
+      `${import.meta.env.VITE_API_ENDPOINT}/user/${id}`,
+      {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to update email");
+    }
+
+    return response.json();
+  };
+
+  const checkWhetherToPromptForEmail = async (id: string) => {
+    setIsCheckingUserProfile(true);
+
+    try {
+      const profile = await fetchUserProfile(id);
+
+      if (!profile) {
+        setShowEmailModal(false);
+        return;
+      }
+
+      const hasEmail = Boolean(profile.email?.trim());
+      const anonymousChoice = localStorage.getItem(getAnonymousChoiceKey(id));
+
+      if (!hasEmail && anonymousChoice !== "true") {
+        setShowEmailModal(true);
+        setEmailChoiceStep("choice");
+      } else {
+        setShowEmailModal(false);
+      }
+    } finally {
+      setIsCheckingUserProfile(false);
+    }
+  };
+
   // Fetch chat sessions for the user
   const fetchChatSessions = async () => {
     if (!userId) {
@@ -69,11 +178,7 @@ export default function HomePage() {
 
     setIsLoadingChatSessions(true);
     try {
-      const tokenResponse = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
-      );
-      if (!tokenResponse.ok) throw new Error("Failed to get public token");
-      const { token } = await tokenResponse.json();
+      const { token } = await getPublicToken();
 
       const response = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/chat_sessions/user/${userId}`,
@@ -99,6 +204,8 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    if (isLoadingUser) return;
+
     setIsLoadingWelcome(true);
     setIsLoadingDisclaimer(true);
 
@@ -109,20 +216,23 @@ export default function HomePage() {
       setIsLoadingWelcome(false);
       setIsLoadingDisclaimer(false);
     });
+
     fetchChatSessions();
+
+    if (userId) {
+      checkWhetherToPromptForEmail(userId);
+    } else {
+      setIsCheckingUserProfile(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, isLoadingUser]);
 
   // Create a new chat session
   const createNewChatSession = async (): Promise<ChatSession | null> => {
     if (!userId) return null;
 
     try {
-      const tokenResponse = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
-      );
-      if (!tokenResponse.ok) throw new Error("Failed to get public token");
-      const { token } = await tokenResponse.json();
+      const { token } = await getPublicToken();
 
       const createResponse = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/chat_sessions`,
@@ -176,8 +286,53 @@ export default function HomePage() {
     }
   };
 
+  const handleStayAnonymous = () => {
+    if (!userId) return;
+    localStorage.setItem(getAnonymousChoiceKey(userId), "true");
+    setShowEmailModal(false);
+  };
+
+  const handleUseEmail = () => {
+    setEmailChoiceStep("email");
+    setEmailError(null);
+  };
+
+  const handleSaveEmail = async () => {
+    if (!userId) return;
+
+    const normalizedEmail = emailInput.trim().toLowerCase();
+
+    if (!normalizedEmail) {
+      setEmailError("Please enter an email address.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(normalizedEmail)) {
+      setEmailError("Please enter a valid email address.");
+      return;
+    }
+
+    setIsSavingEmail(true);
+    setEmailError(null);
+
+    try {
+      await updateUserEmail(userId, normalizedEmail);
+      localStorage.removeItem(getAnonymousChoiceKey(userId));
+      setShowEmailModal(false);
+      setEmailInput("");
+    } catch (err) {
+      console.error("Error updating user email:", err);
+      setEmailError(
+        "We couldn't save your email yet. This endpoint still needs to be implemented."
+      );
+    } finally {
+      setIsSavingEmail(false);
+    }
+  };
+
   // Show loading screen while fetching initial data
-  if (isLoadingChatSessions) {
+  if (isLoadingUser || isLoadingChatSessions || isCheckingUserProfile) {
     return (
       <div className="flex flex-col min-h-screen bg-background">
         <div className="pt-[70px] flex-1 flex items-center justify-center">
@@ -238,6 +393,63 @@ export default function HomePage() {
             </main>
             <Footer />
           </div>
+
+          <Dialog open={showEmailModal}>
+            <DialogContent
+              className="sm:max-w-md"
+              onEscapeKeyDown={(e) => e.preventDefault()}
+              onInteractOutside={(e) => e.preventDefault()}
+            >
+              <DialogHeader>
+                <DialogTitle>Would you like to stay anonymous?</DialogTitle>
+                <DialogDescription>
+                  You can continue anonymously, or provide your email so we can
+                  associate it with your account.
+                </DialogDescription>
+              </DialogHeader>
+
+              {emailChoiceStep === "choice" ? (
+                <div className="flex flex-col gap-3 pt-2">
+                  <Button onClick={handleStayAnonymous}>
+                    Yes, stay anonymous
+                  </Button>
+                  <Button variant="outline" onClick={handleUseEmail}>
+                    No, I want to enter my email
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3 pt-2">
+                  <Input
+                    type="email"
+                    placeholder="Enter your email"
+                    value={emailInput}
+                    onChange={(e) => setEmailInput(e.target.value)}
+                    disabled={isSavingEmail}
+                  />
+
+                  {emailError ? (
+                    <p className="text-sm text-destructive">{emailError}</p>
+                  ) : null}
+
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setEmailChoiceStep("choice");
+                        setEmailError(null);
+                      }}
+                      disabled={isSavingEmail}
+                    >
+                      Back
+                    </Button>
+                    <Button onClick={handleSaveEmail} disabled={isSavingEmail}>
+                      {isSavingEmail ? "Saving..." : "Save email"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
       </SidebarProvider>
     </ViewProvider>

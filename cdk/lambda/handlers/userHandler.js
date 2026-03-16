@@ -157,6 +157,94 @@ exports.handler = async (event) => {
         break;
       }
 
+      // Update's user with email so they no longer will be anonymous
+      case "PUT /user/{user_id}": {
+        const userId = event.pathParameters?.user_id;
+
+        if (!userId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "user_id is required" });
+          break;
+        }
+
+        let parsedBody = {};
+
+        try {
+          parsedBody = event.body ? JSON.parse(event.body) : {};
+        } catch (err) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Request body must be valid JSON" });
+          break;
+        }
+
+        const rawEmail = parsedBody.email;
+
+        if (typeof rawEmail !== "string") {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "email is required and must be a string" });
+          break;
+        }
+
+        const normalizedEmail = rawEmail.trim().toLowerCase();
+
+        if (!normalizedEmail) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "email cannot be empty" });
+          break;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(normalizedEmail)) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "Invalid email format" });
+          break;
+        }
+
+        const existingUser = await sqlConnection`
+          SELECT id
+          FROM users
+          WHERE id = ${userId}
+        `;
+
+        if (existingUser.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "User not found" });
+          break;
+        }
+
+        try {
+          const updatedUser = await sqlConnection`
+            UPDATE users
+            SET
+              email = ${normalizedEmail},
+              last_seen_at = NOW()
+            WHERE id = ${userId}
+            RETURNING
+              id,
+              email,
+              display_name,
+              role,
+              created_at,
+              last_seen_at,
+              tokens_used,
+              token_window_started_at,
+              metadata
+          `;
+
+          response.statusCode = 200;
+          response.body = JSON.stringify(updatedUser[0]);
+        } catch (err) {
+          // Postgres unique violation
+          if (err.code === "23505") {
+            response.statusCode = 409;
+            response.body = JSON.stringify({ error: "Email is already in use" });
+            break;
+          }
+          throw err;
+        }
+        break;
+      }
+
       // DEPRECATED by /user --> will delete later
       case "POST /user_sessions":
         // After schema refactor, user_sessions no longer has a separate session_id column.
