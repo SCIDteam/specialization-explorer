@@ -53,7 +53,6 @@ const setCachedItem = (key: string, data: any) => {
 type UserData = {
     id: string;
     email: string;
-    display_name: string;
     role: string;
     last_seen_at?: string;
 };
@@ -293,10 +292,7 @@ export default function ChatHistory() {
                                         >
                                             <div>
                                                 <div className="font-semibold text-base text-gray-900">
-                                                    {user.display_name || `User ${index + 1}`}
-                                                </div>
-                                                <div className="text-xs text-gray-500 font-mono truncate max-w-[180px]">
-                                                    {user.email || 'No email provided'}
+                                                    {user.email || `User ${index + 1}`}
                                                 </div>
                                             </div>
                                             <div className="text-gray-400">
