@@ -253,11 +253,11 @@ export default function SystemMessageEditor({
           </div>
 
           <div className="text-xs text-gray-500">
-            Type{" "}
+            This is version{" "}
             <span className="font-medium text-gray-700">
               {current?.version ?? 1}
             </span>{" "}
-            of{" "}
+            and you have a total of{" "}
             <span className="font-medium text-gray-700">
               {sorted.length}
             </span>
