@@ -673,6 +673,7 @@ paths:
                       - content
                       - version
                       - is_active
+                      - affects_text_generation
                       - created_by
                       - created_by_email
                       - created_at
@@ -693,6 +694,8 @@ paths:
                           - detective_phase_prompt
                           - suggestion_phase_prompt
                           - welcome_message
+                          - partial_hallucination_warning
+                          - full_hallucination_warning
                       content:
                         type: string
                         description: Message content
@@ -703,6 +706,9 @@ paths:
                       is_active:
                         type: boolean
                         description: Whether this version is currently active
+                      affects_text_generation:
+                        type: boolean
+                        description: Whether this system nessage affects text generation
                       created_by:
                         type: string
                         format: uuid
@@ -726,6 +732,7 @@ paths:
                         content: "AI can make mistakes. Check important info."
                         version: 2
                         is_active: true
+                        affects_text_generation: false
                         created_by: "cdfcaadc-cad4-4647-a98f-9e4e0a6e049f"
                         created_by_email: "admin@example.com"
                         created_at: "2026-02-18T19:21:18.406Z"
@@ -734,6 +741,7 @@ paths:
                         content: "AI can make mistakes. Check important info."
                         version: 1
                         is_active: false
+                        affects_text_generation: false
                         created_at: "2026-02-01T12:00:00.000Z"
                     welcome_message:
                       - id: "6bda6a51-2af0-4312-8d47-89f6169ae4ad"
@@ -741,6 +749,7 @@ paths:
                         content: "Together we will try to find the right program for you. Click below to start a new conversation."
                         version: 1
                         is_active: true
+                        affects_text_generation: false
                         created_at: "2026-02-18T19:21:18.406Z"
         "401":
           description: Unauthorized

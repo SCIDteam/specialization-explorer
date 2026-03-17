@@ -179,6 +179,7 @@ exports.handler = async (event) => {
             sm.content,
             sm.version,
             sm.is_active,
+            sm.affects_text_generation,
             sm.created_by,
             sm.created_at,
             u.email AS created_by_email
@@ -201,6 +202,7 @@ exports.handler = async (event) => {
             content: r.content,
             version: r.version,
             is_active: r.is_active,
+            affects_text_generation: r.affects_text_generation,
             created_by: r.created_by ?? null,
             created_by_email: r.created_by_email ?? null,
             created_at: r.created_at,
