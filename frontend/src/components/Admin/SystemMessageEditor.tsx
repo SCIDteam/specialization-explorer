@@ -6,8 +6,9 @@ import {
   CheckCircle2,
   Save,
   Trash2,
-  Power
- } from "lucide-react";
+  Power,
+  Map,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -39,6 +40,16 @@ export type SystemMessageType =
   | "partial_hallucination_warning"
   | "full_hallucination_warning";
 
+export type MessagePlacement =
+  | "initial_prompt"
+  | "role"
+  | "phase_detective"
+  | "phase_suggestion"
+  | "checklist"
+  | "instructions"
+  | "guardrails"
+  | "ui_only";
+
 export type SystemMessageVersion = {
   id: string;
   type: SystemMessageType;
@@ -54,6 +65,8 @@ type Props = {
   type: SystemMessageType;
   title: string;
   description?: string;
+  placement: MessagePlacement;
+  affectsTextGeneration: boolean;
   versions: SystemMessageVersion[];
   adminEmail?: string | null;
 
@@ -64,6 +77,52 @@ type Props = {
   onDelete: (type: SystemMessageType, versionId: string) => Promise<void>;
   onActivate: (type: SystemMessageType, versionId: string) => Promise<void>;
 };
+
+type PromptPhase = "DETECTIVE" | "SUGGESTION";
+
+const STACK_ROWS: Array<{
+  key: string;
+  title: string;
+  isActive: (placement: MessagePlacement, selectedPhase: PromptPhase) => boolean;
+}> = [
+  {
+    key: "initial_prompt",
+    title: "Initial Prompt",
+    isActive: (placement) => placement === "initial_prompt",
+  },
+  {
+    key: "role",
+    title: "System Role",
+    isActive: (placement) => placement === "role",
+  },
+  {
+    key: "phase",
+    title: "Phase Prompt",
+    isActive: (placement, selectedPhase) =>
+      (placement === "phase_detective" && selectedPhase === "DETECTIVE") ||
+      (placement === "phase_suggestion" && selectedPhase === "SUGGESTION"),
+  },
+  {
+    key: "checklist",
+    title: "System Checklist",
+    isActive: (placement) => placement === "checklist",
+  },
+  {
+    key: "instructions",
+    title: "System Instructions",
+    isActive: (placement) => placement === "instructions",
+  },
+  {
+    key: "allowed_specializations",
+    title: "Allowed Specializations",
+    isActive: () => false,
+  },
+  {
+    key: "guardrails",
+    title: "Guardrails",
+    isActive: (placement) => placement === "guardrails",
+  },
+];
 
 function formatDate(iso?: string) {
   if (!iso) return "—";
@@ -86,10 +145,70 @@ function defaultAffectsTextGeneration(type: SystemMessageType) {
   ].includes(type);
 }
 
+function truncatePreview(text?: string, max = 120) {
+  const value = (text ?? "").trim();
+  if (!value) return "No active content available.";
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+function PlacementStack({
+  placement,
+  selectedPhase,
+}: {
+  placement: MessagePlacement;
+  selectedPhase: PromptPhase;
+}) {
+  return (
+    <div className="space-y-2">
+      {STACK_ROWS.map((row, index) => {
+        const isPhaseRow = row.key === "phase";
+        const title =
+          isPhaseRow
+            ? selectedPhase === "DETECTIVE"
+              ? "Detective Phase Prompt"
+              : "Suggestion Phase Prompt"
+            : row.title;
+
+        const active = row.isActive(placement, selectedPhase);
+
+        return (
+          <div key={row.key}>
+            <div
+              className={[
+                "rounded-lg border px-3 py-3 transition",
+                active
+                  ? "border-[#2c5f7c] bg-[#2c5f7c]/10"
+                  : "border-gray-200 bg-gray-50",
+              ].join(" ")}
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-medium text-sm text-gray-900">{title}</span>
+                {active ? (
+                  <span className="text-xs rounded-full bg-[#2c5f7c] text-white px-2 py-1">
+                    This message
+                  </span>
+                ) : null}
+              </div>
+            </div>
+
+            {index < STACK_ROWS.length - 1 ? (
+              <div className="flex justify-center py-1">
+                <div className="h-4 w-px bg-gray-300" />
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function SystemMessageEditor({
   type,
   title,
   description,
+  placement,
+  affectsTextGeneration,
   versions,
   adminEmail,
   onCreateVersion,
@@ -125,12 +244,25 @@ export default function SystemMessageEditor({
 
   const [activating, setActivating] = useState(false);
 
+  const [placementOpen, setPlacementOpen] = useState(false);
+  const [placementPhase, setPlacementPhase] = useState<PromptPhase>(
+    placement === "phase_suggestion" ? "SUGGESTION" : "DETECTIVE"
+  );
+
   useEffect(() => {
     setDraft(current?.content ?? "");
     setIsDirty(false);
     setSaveError(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, current?.id]);
+
+  useEffect(() => {
+    if (placement === "phase_suggestion") {
+      setPlacementPhase("SUGGESTION");
+    } else if (placement === "phase_detective") {
+      setPlacementPhase("DETECTIVE");
+    }
+  }, [placement]);
 
   const canPrev = idx > 0;
   const canNext = idx < sorted.length - 1;
@@ -230,15 +362,27 @@ export default function SystemMessageEditor({
   return (
     <Card className="border-gray-200 shadow-sm w-full">
       <CardHeader className="space-y-2">
-        <CardTitle className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-[#2c5f7c]" />
-          {title}
-        </CardTitle>
-        {description ? (
-          <CardDescription>{description}</CardDescription>
-        ) : null}
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+          <div className="space-y-2">
+            <CardTitle className="flex items-center gap-2">
+              <Bot className="h-5 w-5 text-[#2c5f7c]" />
+              {title}
+            </CardTitle>
 
-        {/* Horizontal version scroller */}
+            {description ? <CardDescription>{description}</CardDescription> : null}
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setPlacementOpen(true)}
+            className="shrink-0"
+          >
+            <Map className="mr-2 h-4 w-4" />
+            Where does this go?
+          </Button>
+        </div>
+
         <div className="flex items-center justify-between pt-2">
           <div className="flex items-center gap-2">
             <Button
@@ -267,14 +411,10 @@ export default function SystemMessageEditor({
 
           <div className="text-xs text-gray-500">
             This is version{" "}
-            <span className="font-medium text-gray-700">
-              {current?.version ?? 1}
-            </span>{" "}
+            <span className="font-medium text-gray-700">{current?.version ?? 1}</span>{" "}
             and you have a total of{" "}
-            <span className="font-medium text-gray-700">
-              {sorted.length}
-            </span>
-            {" "}version{sorted.length > 1 ? "s" : ""}
+            <span className="font-medium text-gray-700">{sorted.length}</span>{" "}
+            version{sorted.length > 1 ? "s " : " "}to choose from
           </div>
         </div>
 
@@ -397,6 +537,7 @@ export default function SystemMessageEditor({
           ) : null}
         </div>
       </CardContent>
+
       <Dialog open={deleteOpen} onOpenChange={(open) => !deleting && setDeleteOpen(open)}>
         <DialogContent>
           <DialogHeader>
@@ -424,6 +565,90 @@ export default function SystemMessageEditor({
               className="bg-red-600 hover:bg-red-700 text-white"
             >
               {deleting ? "Deleting..." : "Yes, Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={placementOpen} onOpenChange={setPlacementOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Map className="h-5 w-5 text-[#2c5f7c]" />
+              Where does this go?
+            </DialogTitle>
+            <DialogDescription>
+              {affectsTextGeneration
+                ? <>See where <span className="font-medium">{title}</span> fits into the overall prompt flow.</>
+                : <>This message is shown in the UI and does not affect text generation.</>}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            {placement !== "ui_only" && (
+              <>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="text-sm font-medium text-gray-800">
+                    Prompt position preview
+                  </div>
+
+                  <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50 w-fit">
+                    <Button
+                      type="button"
+                      variant={placementPhase === "DETECTIVE" ? "default" : "ghost"}
+                      className={
+                        placementPhase === "DETECTIVE"
+                          ? "bg-[#2c5f7c] hover:bg-[#234d63]"
+                          : ""
+                      }
+                      onClick={() => setPlacementPhase("DETECTIVE")}
+                    >
+                      Detective
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={placementPhase === "SUGGESTION" ? "default" : "ghost"}
+                      className={
+                        placementPhase === "SUGGESTION"
+                          ? "bg-[#2c5f7c] hover:bg-[#234d63]"
+                          : ""
+                      }
+                      onClick={() => setPlacementPhase("SUGGESTION")}
+                    >
+                      Suggestion
+                    </Button>
+                  </div>
+                </div>
+
+                {((placement === "phase_detective" && placementPhase === "SUGGESTION") ||
+                  (placement === "phase_suggestion" && placementPhase === "DETECTIVE")) && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    This message is only used in the{" "}
+                    <span className="font-medium">
+                      {placement === "phase_detective" ? "Detective" : "Suggestion"}
+                    </span>{" "}
+                    phase.
+                  </div>
+                )}
+
+                <PlacementStack
+                  placement={placement}
+                  selectedPhase={placementPhase}
+                />
+              </>
+            )}
+
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
+              <div className="text-sm font-medium text-gray-900 mb-2">Current active content preview</div>
+              <div className="text-sm text-gray-700 whitespace-pre-wrap">
+                {truncatePreview(current?.content, 240)}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPlacementOpen(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

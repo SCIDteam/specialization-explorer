@@ -1,5 +1,18 @@
 import { useState, useEffect, useMemo } from "react";
-import { Save, Bot, ChevronDown, ChevronUp, Plus, Trash2, Edit2, X, List } from "lucide-react";
+import {
+  Save,
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  Trash2,
+  Edit2,
+  X,
+  List,
+  Sparkles,
+  Eye,
+  Route,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -16,6 +29,7 @@ import SystemMessageEditor from "@/components/Admin/SystemMessageEditor";
 import type {
   SystemMessageType,
   SystemMessageVersion,
+  MessagePlacement,
 } from "@/components/Admin/SystemMessageEditor";
 
 type SystemSettingsDTO = {
@@ -26,7 +40,6 @@ type SystemSettingsDTO = {
   temperature: number;
   top_p: number;
   specialization_list?: string[];
-
   updated_at?: string;
   updated_by_email?: string | null;
 };
@@ -45,51 +58,25 @@ const DEFAULT_SETTINGS: SystemSettingsDTO = {
 
 // Default seeded messages (v1, active, created_by NULL)
 const DEFAULT_SYSTEM_MESSAGES: Record<SystemMessageType, SystemMessageVersion[]> = {
-  system_role: [
-    {
-      id: "seed-system_role-v1",
-      type: "system_role",
-      content:
-        "ROLE: UBC Science Specialization Explorer. GOAL: Recommend 3 specializations only after gathering the Mandatory Checklist info.",
-      version: 1,
-      is_active: true,
-      affects_text_generation: true,
-      created_by_email: null,
-      created_at: undefined,
-    },
-  ],
-  system_checklist: [
-    {
-      id: "seed-system_checklist-v1",
-      type: "system_checklist",
-      content:
-        "MANDATORY CHECKLIST (collect before recommending): 1) Core subject (Life Sci / Physical Sci / Math / CompSci). 2) Specific topics (e.g., Genetics, Quantum, ML). 3) Work style (Lab / Field / Desk / Theory). 4) Career goal (Academia / Industry / Professional). 5) Problem type (Abstract puzzles vs concrete building).",
-      version: 1,
-      is_active: true,
-      affects_text_generation: true,
-      created_by_email: null,
-      created_at: undefined,
-    },
-  ],
-  system_instructions: [
-    {
-      id: "seed-system_instructions-v1",
-      type: "system_instructions",
-      content:
-        'INSTRUCTIONS: Ask exactly one follow-up question at a time to fill a checklist blank. Do not list specializations until in Analysis & Suggestion phase, unless the user explicitly asks for suggestions. Be conversational. When listing, use: "Bachelor of Science in <Subject Name>" and only if it exists in the knowledge base.',
-      version: 1,
-      is_active: true,
-      affects_text_generation: true,
-      created_by_email: null,
-      created_at: undefined,
-    },
-  ],
   initial_prompt: [
     {
       id: "seed-initial_prompt-v1",
       type: "initial_prompt",
       content:
         "Act as the Specialization Explorer. Briefly introduce yourself. Then ask these 3 starter questions one by one (not together): (1) What are your academic interests? (2) Which course or department do you like most at UBC Science? (3) Do you want to pursue research or enter industry after graduation? Be friendly and inviting.",
+      version: 1,
+      is_active: true,
+      affects_text_generation: true,
+      created_by_email: null,
+      created_at: undefined,
+    },
+  ],
+  system_role: [
+    {
+      id: "seed-system_role-v1",
+      type: "system_role",
+      content:
+        "ROLE: UBC Science Specialization Explorer. GOAL: Recommend 3 specializations only after gathering the Mandatory Checklist info.",
       version: 1,
       is_active: true,
       affects_text_generation: true,
@@ -116,6 +103,32 @@ const DEFAULT_SYSTEM_MESSAGES: Record<SystemMessageType, SystemMessageVersion[]>
       type: "suggestion_phase_prompt",
       content:
         "PHASE: Analysis & Suggestion (catalog available). If Subject + Career + Work Style are known: suggest 3 majors. If a key piece is missing: ask one more question.",
+      version: 1,
+      is_active: true,
+      affects_text_generation: true,
+      created_by_email: null,
+      created_at: undefined,
+    },
+  ],
+  system_checklist: [
+    {
+      id: "seed-system_checklist-v1",
+      type: "system_checklist",
+      content:
+        "MANDATORY CHECKLIST (collect before recommending): 1) Core subject (Life Sci / Physical Sci / Math / CompSci). 2) Specific topics (e.g., Genetics, Quantum, ML). 3) Work style (Lab / Field / Desk / Theory). 4) Career goal (Academia / Industry / Professional). 5) Problem type (Abstract puzzles vs concrete building).",
+      version: 1,
+      is_active: true,
+      affects_text_generation: true,
+      created_by_email: null,
+      created_at: undefined,
+    },
+  ],
+  system_instructions: [
+    {
+      id: "seed-system_instructions-v1",
+      type: "system_instructions",
+      content:
+        'INSTRUCTIONS: Ask exactly one follow-up question at a time to fill a checklist blank. Do not list specializations until in Analysis & Suggestion phase, unless the user explicitly asks for suggestions. Be conversational. When listing, use: "Bachelor of Science in <Subject Name>" and only if it exists in the knowledge base.',
       version: 1,
       is_active: true,
       affects_text_generation: true,
@@ -165,7 +178,8 @@ const DEFAULT_SYSTEM_MESSAGES: Record<SystemMessageType, SystemMessageVersion[]>
     {
       id: "seed-partial_hallucination_warning-v1",
       type: "partial_hallucination_warning",
-      content: "Warning: Parts of this answer may not be fully supported by the retrieved UBC source content. Please verify the program details against the relevant UBC calendar page.",
+      content:
+        "Warning: Parts of this answer may not be fully supported by the retrieved UBC source content. Please verify the program details against the relevant UBC calendar page.",
       version: 1,
       is_active: true,
       affects_text_generation: false,
@@ -177,7 +191,8 @@ const DEFAULT_SYSTEM_MESSAGES: Record<SystemMessageType, SystemMessageVersion[]>
     {
       id: "seed-full_hallucination_warning-v1",
       type: "full_hallucination_warning",
-      content: "Warning: This answer may not be reliably grounded in the retrieved UBC source content and could contain incorrect program details. Please verify against the relevant UBC calendar page.",
+      content:
+        "Warning: This answer may not be reliably grounded in the retrieved UBC source content and could contain incorrect program details. Please verify against the relevant UBC calendar page.",
       version: 1,
       is_active: true,
       affects_text_generation: false,
@@ -187,66 +202,260 @@ const DEFAULT_SYSTEM_MESSAGES: Record<SystemMessageType, SystemMessageVersion[]>
   ],
 };
 
-const MESSAGE_META: Record<
-  SystemMessageType,
-  { title: string; description: string, affectsTextGeneration: boolean }
-> = {
-  system_role: {
-    title: "System Role",
-    description: "Defines who the assistant is, what it specializes in, and how it should generally behave",
-    affectsTextGeneration: true
-  },
-  system_checklist: {
-    title: "System Checklist",
-    description: "A list of key points the assistant should cover to fully understand the user’s needs",
-    affectsTextGeneration: true
-  },
-  system_instructions: {
-    title: "System Instructions",
-    description: "Guidelines that control how the assistant formats and delivers its responses",
-    affectsTextGeneration: true
-  },
+type MessageMeta = {
+  title: string;
+  description: string;
+  affectsTextGeneration: boolean;
+  placement: MessagePlacement;
+};
+
+export const MESSAGE_META: Record<SystemMessageType, MessageMeta> = {
   initial_prompt: {
     title: "Initial Prompt",
     description: "The opening context that sets the direction and purpose of the conversation",
-    affectsTextGeneration: true
+    affectsTextGeneration: true,
+    placement: "initial_prompt",
+  },
+  system_role: {
+    title: "System Role",
+    description: "Defines who the assistant is, what it specializes in, and how it should generally behave",
+    affectsTextGeneration: true,
+    placement: "role",
   },
   detective_phase_prompt: {
     title: "Detective Phase Prompt",
     description: "Instructions for asking the right questions to better understand the user’s situation",
-    affectsTextGeneration: true
+    affectsTextGeneration: true,
+    placement: "phase_detective",
   },
   suggestion_phase_prompt: {
     title: "Suggestion Phase Prompt",
     description: "Guidance for turning gathered information into clear, practical recommendations",
-    affectsTextGeneration: true
+    affectsTextGeneration: true,
+    placement: "phase_suggestion",
+  },
+  system_checklist: {
+    title: "System Checklist",
+    description: "A list of key points the assistant should cover to fully understand the user’s needs",
+    affectsTextGeneration: true,
+    placement: "checklist",
+  },
+  system_instructions: {
+    title: "System Instructions",
+    description: "Guidelines that control how the assistant formats and delivers its responses",
+    affectsTextGeneration: true,
+    placement: "instructions",
   },
   guardrails: {
     title: "Guardrails",
     description: "Boundaries that keep the assistant focused, appropriate, and within scope",
-    affectsTextGeneration: true
+    affectsTextGeneration: true,
+    placement: "guardrails",
   },
   welcome_message: {
     title: "Welcome Message",
     description: "The first message shown to greet the user and start the conversation",
-    affectsTextGeneration: false
+    affectsTextGeneration: false,
+    placement: "ui_only",
   },
   disclaimer: {
     title: "Disclaimer",
     description: "A short note explaining the limits of the assistant’s advice and responsibility",
-    affectsTextGeneration: false
+    affectsTextGeneration: false,
+    placement: "ui_only",
   },
   partial_hallucination_warning: {
     title: "Partial Hallucination Warning",
     description: "A warning message for when the LLM's output might contain some hallucinations",
-    affectsTextGeneration: false
+    affectsTextGeneration: false,
+    placement: "ui_only",
   },
   full_hallucination_warning: {
     title: "Full Hallucination Warning",
     description: "A warning message for when the LLM's output definitely contains some hallucinations",
-    affectsTextGeneration: false
+    affectsTextGeneration: false,
+    placement: "ui_only",
   },
 };
+
+type PromptPhase = "DETECTIVE" | "SUGGESTION";
+
+type PromptStackBlock = {
+  key: string;
+  title: string;
+  preview: string;
+};
+
+const PROMPT_STACK_ORDER: Array<{
+  key: string;
+  title: string;
+  getPreview: (
+    phase: PromptPhase,
+    messages: Record<SystemMessageType, SystemMessageVersion[]>,
+    settings: SystemSettingsDTO
+  ) => string;
+}> = [
+  {
+    key: "initial_prompt",
+    title: "Initial Prompt",
+    getPreview: (_, messages) => getActiveVersion(messages.initial_prompt)?.content ?? "",
+  },
+  {
+    key: "role",
+    title: "System Role",
+    getPreview: (_, messages) => getActiveVersion(messages.system_role)?.content ?? "",
+  },
+  {
+    key: "phase",
+    title: "Phase Prompt",
+    getPreview: (phase, messages) =>
+      phase === "DETECTIVE"
+        ? getActiveVersion(messages.detective_phase_prompt)?.content ?? ""
+        : getActiveVersion(messages.suggestion_phase_prompt)?.content ?? "",
+  },
+  {
+    key: "checklist",
+    title: "System Checklist",
+    getPreview: (_, messages) => getActiveVersion(messages.system_checklist)?.content ?? "",
+  },
+  {
+    key: "instructions",
+    title: "System Instructions",
+    getPreview: (_, messages) => getActiveVersion(messages.system_instructions)?.content ?? "",
+  },
+  {
+    key: "allowed_specializations",
+    title: "Allowed Specializations",
+    getPreview: (_, __, settings) => {
+      const specCount = settings.specialization_list?.length ?? 0;
+      return specCount > 0
+        ? `${specCount} specialization${specCount === 1 ? "" : "s"} available`
+        : "No specializations configured";
+    },
+  },
+  {
+    key: "guardrails",
+    title: "Guardrails",
+    getPreview: (_, messages) => getActiveVersion(messages.guardrails)?.content ?? "",
+  },
+];
+
+function getActiveVersion(
+  versions: SystemMessageVersion[] | undefined
+): SystemMessageVersion | undefined {
+  if (!versions?.length) return undefined;
+  return versions.find((v) => v.is_active) ?? versions[0];
+}
+
+function getPromptStackBlocks(
+  phase: PromptPhase,
+  messages: Record<SystemMessageType, SystemMessageVersion[]>,
+  settings: SystemSettingsDTO
+): PromptStackBlock[] {
+  return PROMPT_STACK_ORDER.map((item) => ({
+    key: item.key,
+    title:
+      item.key === "phase"
+        ? phase === "DETECTIVE"
+          ? "Detective Phase Prompt"
+          : "Suggestion Phase Prompt"
+        : item.title,
+    preview: item.getPreview(phase, messages, settings),
+  }));
+}
+
+function truncatePreview(text?: string, max = 130) {
+  const value = (text ?? "").trim();
+  if (!value) return "No active content available.";
+  return value.length > max ? `${value.slice(0, max)}…` : value;
+}
+
+function PromptAssemblyCard({
+  phase,
+  setPhase,
+  settings,
+  messages,
+}: {
+  phase: PromptPhase;
+  setPhase: (phase: PromptPhase) => void;
+  settings: SystemSettingsDTO;
+  messages: Record<SystemMessageType, SystemMessageVersion[]>;
+}) {
+  const blocks = useMemo(
+    () => getPromptStackBlocks(phase, messages, settings),
+    [phase, messages, settings]
+  );
+
+  return (
+    <Card className="border-gray-200 shadow-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Route className="h-5 w-5 text-[#2c5f7c]" />
+          How the Prompt Is Built
+        </CardTitle>
+        <CardDescription>
+          The assistant’s final prompt is assembled from active message blocks in a fixed order.
+          The phase section changes depending on how far the conversation has progressed.
+        </CardDescription>
+      </CardHeader>
+
+      <CardContent className="space-y-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="inline-flex rounded-lg border border-gray-200 p-1 bg-gray-50 w-fit">
+            <Button
+              type="button"
+              variant={phase === "DETECTIVE" ? "default" : "ghost"}
+              className={phase === "DETECTIVE" ? "bg-[#2c5f7c] hover:bg-[#234d63]" : ""}
+              onClick={() => setPhase("DETECTIVE")}
+            >
+              Detective Phase
+            </Button>
+            <Button
+              type="button"
+              variant={phase === "SUGGESTION" ? "default" : "ghost"}
+              className={phase === "SUGGESTION" ? "bg-[#2c5f7c] hover:bg-[#234d63]" : ""}
+              onClick={() => setPhase("SUGGESTION")}
+            >
+              Suggestion Phase
+            </Button>
+          </div>
+
+          <div className="text-sm text-gray-500">
+            Suggestion phase starts after{" "}
+            <span className="font-medium text-gray-700">
+              {settings.min_messages_before_suggest}
+            </span>{" "}
+            exchange{settings.min_messages_before_suggest === 1 ? "" : "s"}.
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {blocks.map((block, index) => (
+            <div key={block.key} className="relative">
+              <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="space-y-2 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-gray-900">{block.title}</span>
+                  </div>
+
+                  <div className="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                    {truncatePreview(block.preview)}
+                  </div>
+                </div>
+              </div>
+
+              {index < blocks.length - 1 ? (
+                <div className="flex justify-center py-1">
+                  <div className="h-5 w-px bg-gray-300" />
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function SystemSettings() {
   const [settings, setSettings] = useState<SystemSettingsDTO>(DEFAULT_SETTINGS);
@@ -265,6 +474,8 @@ export default function SystemSettings() {
   const [messages, setMessages] = useState<
     Record<SystemMessageType, SystemMessageVersion[]>
   >(DEFAULT_SYSTEM_MESSAGES);
+
+  const [promptPhase, setPromptPhase] = useState<PromptPhase>("DETECTIVE");
 
   const messageTypes = useMemo(
     () => Object.keys(MESSAGE_META) as SystemMessageType[],
@@ -298,10 +509,10 @@ export default function SystemSettings() {
       const res = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/admin/system-settings`,
         {
-          headers: {
-            Authorization: token,
-            "Content-Type": "application/json",
-          },
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
         }
       );
 
@@ -339,16 +550,15 @@ export default function SystemSettings() {
       const res = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/admin/system-messages`,
         {
-          headers: {
-            Authorization: token,
-            "Content-Type": "application/json",
-          },
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
         }
       );
 
       if (!res.ok) throw new Error("Failed to fetch system messages");
       const data = await res.json();
-      console.log(data)
       setMessages(data);
     } catch (e) {
       console.error(e);
@@ -381,12 +591,12 @@ export default function SystemSettings() {
       const res = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/admin/system-settings`,
         {
-          method: "PUT",
-          headers: {
-            Authorization: token,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+        method: "PUT",
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
         }
       );
 
@@ -427,12 +637,12 @@ export default function SystemSettings() {
     const res = await fetch(
       `${import.meta.env.VITE_API_ENDPOINT}/admin/system-messages/${type}`,
       {
-        method: "POST",
-        headers: {
-          Authorization: token,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ content, adminEmail }),
+      method: "POST",
+      headers: {
+        Authorization: token,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ content, adminEmail }),
       }
     );
 
@@ -543,7 +753,7 @@ export default function SystemSettings() {
         </p>
       </div>
 
-      {/* System settings (existing) */}
+      {/* System settings */}
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -851,80 +1061,91 @@ export default function SystemSettings() {
         </CardContent>
       </Card>
 
-
-
       {/* System Messages */}
       <div className="space-y-4">
         <div>
           <h3 className="text-2xl font-bold text-gray-900">System Messages</h3>
           <p className="text-gray-500 mt-1">
-            View and edit different messages shown throughout the application. View version history where rollback is allowed.
+            View and edit different messages shown throughout the application. Version history is preserved so rollback remains possible.
           </p>
         </div>
 
-        <div className="space-y-10">
-        <div className="space-y-4">
-          <div>
-            <h4 className="text-lg font-semibold text-gray-900">
-              Messages That Affect Text Generation
-            </h4>
-            <p className="text-sm text-gray-500 mt-1">
-              These messages are included in the LLM prompt and influence response behavior.
-            </p>
-          </div>
+        <PromptAssemblyCard
+          phase={promptPhase}
+          setPhase={setPromptPhase}
+          settings={settings}
+          messages={messages}
+        />
 
-          <div className="grid grid-cols-1 gap-8">
-            {textGenerationMessageTypes.map((t) => (
-              <SystemMessageEditor
-                key={t}
-                type={t}
-                title={MESSAGE_META[t].title}
-                description={MESSAGE_META[t].description}
-                versions={messages[t] ?? []}
-                adminEmail={adminEmail}
-                onCreateVersion={handleCreateSystemMessageVersion}
-                onDeleteVersion={handleDeleteSystemMessageVersion}
-                onActivateVersion={handleActivateSystemMessageVersion}
-                onSave={saveSystemMessage}
-                onDelete={deleteSystemMessage}
-                onActivate={activateSystemMessage}
-              />
-            ))}
+        <div className="space-y-10">
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-[#2c5f7c]" />
+                Messages That Affect Text Generation
+              </h4>
+              <p className="text-sm text-gray-500 mt-1">
+              These messages are included in the LLM prompt and influence response behavior.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-8">
+              {textGenerationMessageTypes.map((t) => (
+                <SystemMessageEditor
+                  key={t}
+                  type={t}
+                  title={MESSAGE_META[t].title}
+                  description={MESSAGE_META[t].description}
+                  placement={MESSAGE_META[t].placement}
+                  affectsTextGeneration={MESSAGE_META[t].affectsTextGeneration}
+                  versions={messages[t] ?? []}
+                  adminEmail={adminEmail}
+                  onCreateVersion={handleCreateSystemMessageVersion}
+                  onDeleteVersion={handleDeleteSystemMessageVersion}
+                  onActivateVersion={handleActivateSystemMessageVersion}
+                  onSave={saveSystemMessage}
+                  onDelete={deleteSystemMessage}
+                  onActivate={activateSystemMessage}
+                />
+              ))}
+            </div>
           </div>
-        </div>
 
         {/* Visual divider */}
-        <div className="border-t border-gray-200 pt-8">
-          <div className="mb-4">
-            <h4 className="text-lg font-semibold text-gray-900">
-              Messages That Do Not Affect Text Generation
-            </h4>
-            <p className="text-sm text-gray-500 mt-1">
-              These are display or warning messages shown in the UI, but not used as LLM prompt input.
-            </p>
-          </div>
+          <div className="border-t border-gray-200 pt-8 space-y-4">
+            <div>
+              <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Eye className="h-5 w-5 text-[#2c5f7c]" />
+                Messages That Do Not Affect Text Generation
+              </h4>
+              <p className="text-sm text-gray-500 mt-1">
+                These are shown in the product UI, but they are not inserted into the LLM prompt.
+              </p>
+            </div>
 
-          <div className="grid grid-cols-1 gap-8">
-            {nonTextGenerationMessageTypes.map((t) => (
-              <SystemMessageEditor
-                key={t}
-                type={t}
-                title={MESSAGE_META[t].title}
-                description={MESSAGE_META[t].description}
-                versions={messages[t] ?? []}
-                adminEmail={adminEmail}
-                onCreateVersion={handleCreateSystemMessageVersion}
-                onDeleteVersion={handleDeleteSystemMessageVersion}
-                onActivateVersion={handleActivateSystemMessageVersion}
-                onSave={saveSystemMessage}
-                onDelete={deleteSystemMessage}
-                onActivate={activateSystemMessage}
-              />
-            ))}
+            <div className="grid grid-cols-1 gap-8">
+              {nonTextGenerationMessageTypes.map((t) => (
+                <SystemMessageEditor
+                  key={t}
+                  type={t}
+                  title={MESSAGE_META[t].title}
+                  description={MESSAGE_META[t].description}
+                  placement={MESSAGE_META[t].placement}
+                  affectsTextGeneration={MESSAGE_META[t].affectsTextGeneration}
+                  versions={messages[t] ?? []}
+                  adminEmail={adminEmail}
+                  onCreateVersion={handleCreateSystemMessageVersion}
+                  onDeleteVersion={handleDeleteSystemMessageVersion}
+                  onActivateVersion={handleActivateSystemMessageVersion}
+                  onSave={saveSystemMessage}
+                  onDelete={deleteSystemMessage}
+                  onActivate={activateSystemMessage}
+                />
+              ))}
+            </div>
           </div>
         </div>
       </div>
-      </div>
-    </div >
+    </div>
   );
 }
