@@ -189,51 +189,62 @@ const DEFAULT_SYSTEM_MESSAGES: Record<SystemMessageType, SystemMessageVersion[]>
 
 const MESSAGE_META: Record<
   SystemMessageType,
-  { title: string; description: string }
+  { title: string; description: string, affectsTextGeneration: boolean }
 > = {
   system_role: {
     title: "System Role",
     description: "Defines who the assistant is, what it specializes in, and how it should generally behave",
+    affectsTextGeneration: true
   },
   system_checklist: {
     title: "System Checklist",
     description: "A list of key points the assistant should cover to fully understand the user’s needs",
+    affectsTextGeneration: true
   },
   system_instructions: {
     title: "System Instructions",
     description: "Guidelines that control how the assistant formats and delivers its responses",
+    affectsTextGeneration: true
   },
   initial_prompt: {
     title: "Initial Prompt",
     description: "The opening context that sets the direction and purpose of the conversation",
+    affectsTextGeneration: true
   },
   detective_phase_prompt: {
     title: "Detective Phase Prompt",
     description: "Instructions for asking the right questions to better understand the user’s situation",
+    affectsTextGeneration: true
   },
   suggestion_phase_prompt: {
     title: "Suggestion Phase Prompt",
     description: "Guidance for turning gathered information into clear, practical recommendations",
+    affectsTextGeneration: true
   },
   guardrails: {
     title: "Guardrails",
     description: "Boundaries that keep the assistant focused, appropriate, and within scope",
+    affectsTextGeneration: true
   },
   welcome_message: {
     title: "Welcome Message",
     description: "The first message shown to greet the user and start the conversation",
+    affectsTextGeneration: false
   },
   disclaimer: {
     title: "Disclaimer",
     description: "A short note explaining the limits of the assistant’s advice and responsibility",
+    affectsTextGeneration: false
   },
   partial_hallucination_warning: {
     title: "Partial Hallucination Warning",
     description: "A warning message for when the LLM's output might contain some hallucinations",
+    affectsTextGeneration: false
   },
   full_hallucination_warning: {
     title: "Full Hallucination Warning",
     description: "A warning message for when the LLM's output definitely contains some hallucinations",
+    affectsTextGeneration: false
   },
 };
 
@@ -258,6 +269,16 @@ export default function SystemSettings() {
   const messageTypes = useMemo(
     () => Object.keys(MESSAGE_META) as SystemMessageType[],
     []
+  );
+
+  const textGenerationMessageTypes = useMemo(
+    () => messageTypes.filter((t) => MESSAGE_META[t].affectsTextGeneration),
+    [messageTypes]
+  );
+
+  const nonTextGenerationMessageTypes = useMemo(
+    () => messageTypes.filter((t) => !MESSAGE_META[t].affectsTextGeneration),
+    [messageTypes]
   );
 
   const fetchAdminCredentials = async () => {
@@ -841,24 +862,68 @@ export default function SystemSettings() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 gap-8">
-          {messageTypes.map((t) => (
-            <SystemMessageEditor
-              key={t}
-              type={t}
-              title={MESSAGE_META[t].title}
-              description={MESSAGE_META[t].description}
-              versions={messages[t] ?? []}
-              adminEmail={adminEmail}
-              onCreateVersion={handleCreateSystemMessageVersion}
-              onDeleteVersion={handleDeleteSystemMessageVersion}
-              onActivateVersion={handleActivateSystemMessageVersion}
-              onSave={saveSystemMessage}
-              onDelete={deleteSystemMessage}
-              onActivate={activateSystemMessage}
-            />
-          ))}
+        <div className="space-y-10">
+        <div className="space-y-4">
+          <div>
+            <h4 className="text-lg font-semibold text-gray-900">
+              Messages That Affect Text Generation
+            </h4>
+            <p className="text-sm text-gray-500 mt-1">
+              These messages are included in the LLM prompt and influence response behavior.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8">
+            {textGenerationMessageTypes.map((t) => (
+              <SystemMessageEditor
+                key={t}
+                type={t}
+                title={MESSAGE_META[t].title}
+                description={MESSAGE_META[t].description}
+                versions={messages[t] ?? []}
+                adminEmail={adminEmail}
+                onCreateVersion={handleCreateSystemMessageVersion}
+                onDeleteVersion={handleDeleteSystemMessageVersion}
+                onActivateVersion={handleActivateSystemMessageVersion}
+                onSave={saveSystemMessage}
+                onDelete={deleteSystemMessage}
+                onActivate={activateSystemMessage}
+              />
+            ))}
+          </div>
         </div>
+
+        {/* Visual divider */}
+        <div className="border-t border-gray-200 pt-8">
+          <div className="mb-4">
+            <h4 className="text-lg font-semibold text-gray-900">
+              Messages That Do Not Affect Text Generation
+            </h4>
+            <p className="text-sm text-gray-500 mt-1">
+              These are display or warning messages shown in the UI, but not used as LLM prompt input.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-8">
+            {nonTextGenerationMessageTypes.map((t) => (
+              <SystemMessageEditor
+                key={t}
+                type={t}
+                title={MESSAGE_META[t].title}
+                description={MESSAGE_META[t].description}
+                versions={messages[t] ?? []}
+                adminEmail={adminEmail}
+                onCreateVersion={handleCreateSystemMessageVersion}
+                onDeleteVersion={handleDeleteSystemMessageVersion}
+                onActivateVersion={handleActivateSystemMessageVersion}
+                onSave={saveSystemMessage}
+                onDelete={deleteSystemMessage}
+                onActivate={activateSystemMessage}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
       </div>
     </div >
   );

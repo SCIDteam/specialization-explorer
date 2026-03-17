@@ -77,6 +77,15 @@ function nextVersionNumber(list: SystemMessageVersion[]) {
   return maxV + 1;
 }
 
+function defaultAffectsTextGeneration(type: SystemMessageType) {
+  return ![
+    "disclaimer",
+    "welcome_message",
+    "partial_hallucination_warning",
+    "full_hallucination_warning",
+  ].includes(type);
+}
+
 export default function SystemMessageEditor({
   type,
   title,
@@ -154,7 +163,7 @@ export default function SystemMessageEditor({
         content: trimmed,
         version: nextVersionNumber(sorted),
         is_active: true,
-        affects_text_generation: true,
+        affects_text_generation: defaultAffectsTextGeneration(type),
         created_by_email: adminEmail ?? undefined,
         created_at: new Date().toISOString(),
       };
