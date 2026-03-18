@@ -671,6 +671,7 @@ paths:
                       - id
                       - type
                       - content
+                      - character_limit
                       - version
                       - is_active
                       - affects_text_generation
@@ -699,6 +700,9 @@ paths:
                       content:
                         type: string
                         description: Message content
+                      character_limit:
+                        type: integer
+                        description: Limit of characters allowed in message
                       version:
                         type: integer
                         minimum: 1
@@ -730,6 +734,7 @@ paths:
                       - id: "2f0d8c1a-3e2e-4c5d-9c86-1f0a4f1c0d11"
                         type: "disclaimer"
                         content: "AI can make mistakes. Check important info."
+                        character_limit: 400
                         version: 2
                         is_active: true
                         affects_text_generation: false
@@ -739,6 +744,7 @@ paths:
                       - id: "11111111-2222-3333-4444-555555555555"
                         type: "disclaimer"
                         content: "AI can make mistakes. Check important info."
+                        character_limit: 400
                         version: 1
                         is_active: false
                         affects_text_generation: false
@@ -747,6 +753,7 @@ paths:
                       - id: "6bda6a51-2af0-4312-8d47-89f6169ae4ad"
                         type: "welcome_message"
                         content: "Together we will try to find the right program for you. Click below to start a new conversation."
+                        character_limit: 400
                         version: 1
                         is_active: true
                         affects_text_generation: false
