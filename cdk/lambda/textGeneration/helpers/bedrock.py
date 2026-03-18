@@ -9,14 +9,14 @@ logger.setLevel(logging.INFO)
 def retrieve_documents(
     query: str,
     knowledge_base_id: str,
-    bedrock_region: str,
+    region: str,
     num_results: int, 
     search_type: str = "HYBRID",
 ) -> List[Dict[str, Any]]:
     """
     Retrieve documents from the Knowledge Base.
     """
-    agent_runtime = boto3.client("bedrock-agent-runtime", region_name=bedrock_region)
+    agent_runtime = boto3.client("bedrock-agent-runtime", region_name=region)
     
     try:
         response = agent_runtime.retrieve(
