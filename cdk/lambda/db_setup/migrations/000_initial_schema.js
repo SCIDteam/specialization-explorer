@@ -473,7 +473,7 @@ exports.up = (pgm) => {
     VALUES
       (
         'disclaimer',
-        'AI can make mistakes. Check important info.',
+        'The BSc Specialization Explorer strives for accuracy. However, AI-driven tools are not perfect and we encourage you to double check important information before making decisions.',
         700,
         1, TRUE, FALSE, NULL, now()
       ),
