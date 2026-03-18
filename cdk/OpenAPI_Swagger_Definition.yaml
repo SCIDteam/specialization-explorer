@@ -589,6 +589,10 @@ paths:
                   max_chatacters_per_ai_message: { type: integer }
                   temperature: { type: number }
                   top_p: { type: number }
+                  support_score_threshold: { type: number }
+                  scope_alignment_score_threshold: { type: number }
+                  grounded_threshold: { type: number }
+                  partially_grounded_threshold: { type: number }
                   updated_by: { type: string, nullable: true }
                   updated_at: { type: string }
         "401": { description: Unauthorized }
@@ -619,6 +623,10 @@ paths:
                 max_chatacters_per_ai_message: { type: integer }
                 temperature: { type: number }
                 top_p: { type: number }
+                support_score_threshold: { type: number }
+                scope_alignment_score_threshold: { type: number }
+                grounded_threshold: { type: number }
+                partially_grounded_threshold: { type: number }
       responses:
         "200":
           description: Updated system settings
@@ -634,6 +642,10 @@ paths:
                   max_chatacters_per_ai_message: { type: integer }
                   temperature: { type: number }
                   top_p: { type: number }
+                  support_score_threshold: { type: number }
+                  scope_alignment_score_threshold: { type: number }
+                  grounded_threshold: { type: number }
+                  partially_grounded_threshold: { type: number }
                   updated_by: { type: string, nullable: true }
                   updated_at: { type: string }
         "400": { description: Bad Request }

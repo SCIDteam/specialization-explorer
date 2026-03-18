@@ -39,6 +39,10 @@ type SystemSettingsDTO = {
   max_characters_per_ai_message: number;
   temperature: number;
   top_p: number;
+  support_score_threshold: number;
+  scope_alignment_score_threshold: number;
+  grounded_threshold: number;
+  partially_grounded_threshold: number;
   specialization_list?: string[];
   updated_at?: string;
   updated_by_email?: string | null;
@@ -53,6 +57,10 @@ const DEFAULT_SETTINGS: SystemSettingsDTO = {
   max_characters_per_ai_message: 5000,
   temperature: 0.2,
   top_p: 0.9,
+  support_score_threshold: 0.25,
+  scope_alignment_score_threshold: 0.25,
+  grounded_threshold: 0.75,
+  partially_grounded_threshold: 0.5,
   specialization_list: [],
 };
 
@@ -541,6 +549,10 @@ export default function SystemSettings() {
           data.max_characters_per_ai_message ?? DEFAULT_SETTINGS.max_characters_per_ai_message,
         temperature: data.temperature ?? DEFAULT_SETTINGS.temperature,
         top_p: data.top_p ?? DEFAULT_SETTINGS.top_p,
+        support_score_threshold: data.support_score_threshold ?? DEFAULT_SETTINGS.support_score_threshold,
+        scope_alignment_score_threshold: data.scope_alignment_score_threshold ?? DEFAULT_SETTINGS.scope_alignment_score_threshold,
+        grounded_threshold: data.grounded_threshold ?? DEFAULT_SETTINGS.grounded_threshold,
+        partially_grounded_threshold: data.partially_grounded_threshold ?? DEFAULT_SETTINGS.partially_grounded_threshold,
         specialization_list: data.specialization_list ?? DEFAULT_SETTINGS.specialization_list,
         updated_at: data.updated_at,
         updated_by_email: data.updated_by_email ?? null,
@@ -595,6 +607,10 @@ export default function SystemSettings() {
         max_characters_per_ai_message: settings.max_characters_per_ai_message,
         temperature: settings.temperature,
         top_p: settings.top_p,
+        support_score_threshold: settings.support_score_threshold,
+        scope_alignment_score_threshold: settings.scope_alignment_score_threshold,
+        grounded_threshold: settings.grounded_threshold,
+        partially_grounded_threshold: settings.partially_grounded_threshold,
         specialization_list: settings.specialization_list,
         updated_by_email: adminEmail,
       };
@@ -896,6 +912,82 @@ export default function SystemSettings() {
                     }
                   />
                   <p className="text-xs text-gray-500">How strictly the assistant sticks to the most likely words when writing responses. Typical range: 0.8–0.95</p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="support-score-threshold">Top P</Label>
+                  <Input
+                    id="support-score-threshold"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={1}
+                    value={settings.support_score_threshold}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        support_score_threshold: Number(e.target.value),
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500"></p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="scope-alignment-score-threshold">Top P</Label>
+                  <Input
+                    id="scope-alignment-score-threshold"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={1}
+                    value={settings.scope_alignment_score_threshold}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        scope_alignment_score_threshold: Number(e.target.value),
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500"></p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="grounded-threshold">Top P</Label>
+                  <Input
+                    id="grounded-threshold"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={1}
+                    value={settings.grounded_threshold}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        grounded_threshold: Number(e.target.value),
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500"></p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="partially-grounded-threshold">Top P</Label>
+                  <Input
+                    id="partially-grounded-threshold"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={1}
+                    value={settings.partially_grounded_threshold}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        partially_grounded_threshold: Number(e.target.value),
+                      }))
+                    }
+                  />
+                  <p className="text-xs text-gray-500"></p>
                 </div>
               </div>
 

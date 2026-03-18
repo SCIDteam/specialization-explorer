@@ -1230,6 +1230,10 @@ exports.handler = async (event) => {
             latest.max_characters_per_ai_message,
             latest.temperature,
             latest.top_p,
+            latest.support_score_threshold,
+            latest.scope_alignment_score_threshold,
+            latest.grounded_threshold,
+            latest.partially_grounded_threshold,
             latest.specialization_list,
             u.email AS updated_by_email,
             latest.updated_at
@@ -1245,6 +1249,10 @@ exports.handler = async (event) => {
           max_characters_per_ai_message: 5000,
           temperature: 0.2,
           top_p: 0.9,
+          support_score_threshold: 0.25,
+          scope_alignment_score_threshold: 0.25,
+          grounded_threshold: 0.75,
+          partially_grounded_threshold: 0.5,
           updated_by: null,
           updated_at: null,
         };
@@ -1356,6 +1364,18 @@ exports.handler = async (event) => {
           break;
         }
 
+        const validateOptionalUnitIntervalField = (obj, fieldName) => {
+          const value = obj[fieldName];
+
+          if (value === undefined) return null;
+
+          if (!isFiniteNumber(value) || value < 0 || value > 1) {
+            return `${fieldName} must be a number between 0 and 1`;
+          }
+
+          return null;
+        }
+
         const isFiniteNumber = (v) => typeof v === "number" && Number.isFinite(v);
         const isFiniteInt = (v) => Number.isInteger(v) && Number.isFinite(v);
 
@@ -1366,6 +1386,10 @@ exports.handler = async (event) => {
           "max_characters_per_ai_message",
           "temperature",
           "top_p",
+          "support_score_threshold",
+          "scope_alignment_score_threshold",
+          "grounded_threshold",
+          "partially_grounded_threshold",
           "specialization_list",
         ];
 
@@ -1453,14 +1477,24 @@ exports.handler = async (event) => {
           break;
         }
 
-        if (
-          patch.top_p !== undefined &&
-          (!isFiniteNumber(patch.top_p) || patch.top_p < 0 || patch.top_p > 1)
-        ) {
+        const unitIntervalFields = [
+          "top_p",
+          "support_score_threshold",
+          "scope_alignment_score_threshold",
+          "grounded_threshold",
+          "partially_grounded_threshold",
+        ];
+
+        let unitIntervalError = null;
+
+        for (const field of unitIntervalFields) {
+          unitIntervalError = validateOptionalUnitIntervalField(patch, field);
+          if (unitIntervalError) break;
+        }
+
+        if (unitIntervalError) {
           response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "top_p must be a number between 0 and 1",
-          });
+          response.body = JSON.stringify({ error: unitIntervalError });
           break;
         }
 
@@ -1502,6 +1536,10 @@ exports.handler = async (event) => {
             max_characters_per_ai_message = COALESCE(${patch.max_characters_per_ai_message}, s.max_characters_per_ai_message),
             temperature = COALESCE(${patch.temperature}, s.temperature),
             top_p = COALESCE(${patch.top_p}, s.top_p),
+            support_score_threshold = COALESCE(${patch.support_score_threshold}, s.support_score_threshold),
+            scope_alignment_score_threshold = COALESCE(${patch.scope_alignment_score_threshold}, s.scope_alignment_score_threshold),
+            grounded_threshold = COALESCE(${patch.grounded_threshold}, s.grounded_threshold),
+            partially_grounded_threshold = COALESCE(${patch.partially_grounded_threshold}, s.partially_grounded_threshold),
             specialization_list = COALESCE(${patch.specialization_list}, s.specialization_list),
             updated_by = ${updatedByUserId},
             updated_at = NOW()
@@ -1514,6 +1552,10 @@ exports.handler = async (event) => {
             s.max_characters_per_ai_message,
             s.temperature,
             s.top_p,
+            s.support_score_threshold,
+            s.scope_alignment_score_threshold,
+            s.grounded_threshold,
+            s.partially_grounded_threshold,
             s.specialization_list,
             s.updated_by,
             s.updated_at
