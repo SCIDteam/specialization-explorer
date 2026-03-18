@@ -807,9 +807,9 @@ export default function SystemSettings() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="max-messages-per-session">Daily Token Limit</Label>
+                  <Label htmlFor="daily-token-limit">Daily Token Limit</Label>
                   <Input
-                    id="max-messages-per-session"
+                    id="daily-token-limit"
                     type="number"
                     min={1}
                     value={settings.daily_token_limit}
@@ -914,8 +914,168 @@ export default function SystemSettings() {
                   <p className="text-xs text-gray-500">How strictly the assistant sticks to the most likely words when writing responses. Typical range: 0.8–0.95</p>
                 </div>
 
+                {/* Specializations List (Inner Dropdown) */}
+                <div className="md:col-span-2 border border-gray-200 rounded-lg mt-8">
+                  <div
+                    className={`cursor-pointer hover:bg-gray-50 transition-colors flex flex-row items-center justify-between p-6 ${specsExpanded ? 'border-b border-gray-100 rounded-t-lg' : 'rounded-lg'}`}
+                    onClick={() => setSpecsExpanded(!specsExpanded)}
+                  >
+                    <div className="flex flex-col space-y-1.5">
+                      <h3 className="font-semibold leading-none tracking-tight flex items-center gap-2">
+                        <List className="h-5 w-5 text-[#2c5f7c]" />
+                        Specializations
+                      </h3>
+                      <p className="text-sm text-muted-foreground">
+                        Manage the list of available specializations
+                      </p>
+                    </div>
+                    {specsExpanded ? (
+                      <ChevronUp className="h-5 w-5 text-gray-400" />
+                    ) : (
+                      <ChevronDown className="h-5 w-5 text-gray-400" />
+                    )}
+                  </div>
+
+                  {specsExpanded && (
+                    <div className="space-y-4 p-6 pt-4 bg-gray-50/50 rounded-b-lg">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Input
+                          placeholder="New specialization name..."
+                          value={newSpecName}
+                          onChange={(e) => setNewSpecName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newSpecName.trim()) {
+                              setSettings((s) => ({
+                                ...s,
+                                specialization_list: [...(s.specialization_list || []), newSpecName.trim()],
+                              }));
+                              setNewSpecName("");
+                            }
+                          }}
+                          className="bg-white"
+                        />
+                        <Button
+                          variant="outline"
+                          className="shrink-0 bg-white"
+                          onClick={() => {
+                            if (newSpecName.trim()) {
+                              setSettings((s) => ({
+                                ...s,
+                                specialization_list: [...(s.specialization_list || []), newSpecName.trim()],
+                              }));
+                              setNewSpecName("");
+                            }
+                          }}
+                        >
+                          <Plus className="mr-2 h-4 w-4" /> Add
+                        </Button>
+                      </div>
+
+                      <div className="border rounded-md divide-y bg-white max-h-[400px] overflow-y-auto">
+                        {(settings.specialization_list || []).map((spec, idx) => (
+                          <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50 group">
+                            {editingSpecIdx === idx ? (
+                              <div className="flex items-center gap-2 flex-1 mr-4">
+                                <Input
+                                  value={editingSpecName}
+                                  onChange={(e) => setEditingSpecName(e.target.value)}
+                                  className="h-8"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && editingSpecName.trim()) {
+                                      setSettings((s) => {
+                                        const newList = [...(s.specialization_list || [])];
+                                        newList[idx] = editingSpecName.trim();
+                                        return { ...s, specialization_list: newList };
+                                      });
+                                      setEditingSpecIdx(null);
+                                    } else if (e.key === "Escape") {
+                                      setEditingSpecIdx(null);
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => {
+                                    if (editingSpecName.trim()) {
+                                      setSettings((s) => {
+                                        const newList = [...(s.specialization_list || [])];
+                                        newList[idx] = editingSpecName.trim();
+                                        return { ...s, specialization_list: newList };
+                                      });
+                                      setEditingSpecIdx(null);
+                                    }
+                                  }}
+                                >
+                                  <Save className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => setEditingSpecIdx(null)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <>
+                                <span className="text-sm font-medium">{spec}</span>
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => {
+                                      setEditingSpecIdx(idx);
+                                      setEditingSpecName(spec);
+                                    }}
+                                  >
+                                    <Edit2 className="h-4 w-4 text-gray-500 hover:text-blue-500" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
+                                    onClick={() => {
+                                      setSettings((s) => ({
+                                        ...s,
+                                        specialization_list: (s.specialization_list || []).filter((_, i) => i !== idx),
+                                      }));
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                        {(!settings.specialization_list || settings.specialization_list.length === 0) && (
+                          <div className="p-4 text-center text-sm text-gray-500">
+                            No specializations found.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="md:col-span-2 pt-2">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-4">
+                    <div className="font-semibold text-amber-900">Hallucination Checks</div>
+                    <p className="text-sm text-amber-800 mt-1">
+                      The threshold values below do not change how the assistant writes its response.
+                      They are only used after an answer is generated to check whether it is
+                      supported by the retrieved sources and whether a warning should be shown.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label htmlFor="support-score-threshold">Top P</Label>
+                  <Label htmlFor="support-score-threshold">Evidence Match Threshold</Label>
                   <Input
                     id="support-score-threshold"
                     type="number"
@@ -930,11 +1090,11 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500"></p>
+                  <p className="text-xs text-gray-500">Minimum evidence score required for the answer to count as supported by the retrieved sources</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="scope-alignment-score-threshold">Top P</Label>
+                  <Label htmlFor="scope-alignment-score-threshold">Topic Match Threshold</Label>
                   <Input
                     id="scope-alignment-score-threshold"
                     type="number"
@@ -949,11 +1109,11 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500"></p>
+                  <p className="text-xs text-gray-500">Minimum match score required for the retrieved sources to be about the same topic the user asked about</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="grounded-threshold">Top P</Label>
+                  <Label htmlFor="grounded-threshold">Reliable Answer Threshold</Label>
                   <Input
                     id="grounded-threshold"
                     type="number"
@@ -968,11 +1128,11 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500"></p>
+                  <p className="text-xs text-gray-500">Final score needed for an answer to be treated as well-supported and reliable</p>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="partially-grounded-threshold">Top P</Label>
+                  <Label htmlFor="partially-grounded-threshold">Partial Warning Threshold</Label>
                   <Input
                     id="partially-grounded-threshold"
                     type="number"
@@ -987,157 +1147,8 @@ export default function SystemSettings() {
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500"></p>
+                  <p className="text-xs text-gray-500">Final score needed for an answer to be treated as only partly supported rather than fully unreliable</p>
                 </div>
-              </div>
-
-              {/* Specializations List (Inner Dropdown) */}
-              <div className="border border-gray-200 rounded-lg mt-8">
-                <div
-                  className={`cursor-pointer hover:bg-gray-50 transition-colors flex flex-row items-center justify-between p-6 ${specsExpanded ? 'border-b border-gray-100 rounded-t-lg' : 'rounded-lg'}`}
-                  onClick={() => setSpecsExpanded(!specsExpanded)}
-                >
-                  <div className="flex flex-col space-y-1.5">
-                    <h3 className="font-semibold leading-none tracking-tight flex items-center gap-2">
-                      <List className="h-5 w-5 text-[#2c5f7c]" />
-                      Specializations
-                    </h3>
-                    <p className="text-sm text-muted-foreground">
-                      Manage the list of available specializations
-                    </p>
-                  </div>
-                  {specsExpanded ? (
-                    <ChevronUp className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <ChevronDown className="h-5 w-5 text-gray-400" />
-                  )}
-                </div>
-
-                {specsExpanded && (
-                  <div className="space-y-4 p-6 pt-4 bg-gray-50/50 rounded-b-lg">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Input
-                        placeholder="New specialization name..."
-                        value={newSpecName}
-                        onChange={(e) => setNewSpecName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && newSpecName.trim()) {
-                            setSettings((s) => ({
-                              ...s,
-                              specialization_list: [...(s.specialization_list || []), newSpecName.trim()],
-                            }));
-                            setNewSpecName("");
-                          }
-                        }}
-                        className="bg-white"
-                      />
-                      <Button
-                        variant="outline"
-                        className="shrink-0 bg-white"
-                        onClick={() => {
-                          if (newSpecName.trim()) {
-                            setSettings((s) => ({
-                              ...s,
-                              specialization_list: [...(s.specialization_list || []), newSpecName.trim()],
-                            }));
-                            setNewSpecName("");
-                          }
-                        }}
-                      >
-                        <Plus className="mr-2 h-4 w-4" /> Add
-                      </Button>
-                    </div>
-
-                    <div className="border rounded-md divide-y bg-white max-h-[400px] overflow-y-auto">
-                      {(settings.specialization_list || []).map((spec, idx) => (
-                        <div key={idx} className="flex items-center justify-between p-3 hover:bg-gray-50 group">
-                          {editingSpecIdx === idx ? (
-                            <div className="flex items-center gap-2 flex-1 mr-4">
-                              <Input
-                                value={editingSpecName}
-                                onChange={(e) => setEditingSpecName(e.target.value)}
-                                className="h-8"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && editingSpecName.trim()) {
-                                    setSettings((s) => {
-                                      const newList = [...(s.specialization_list || [])];
-                                      newList[idx] = editingSpecName.trim();
-                                      return { ...s, specialization_list: newList };
-                                    });
-                                    setEditingSpecIdx(null);
-                                  } else if (e.key === "Escape") {
-                                    setEditingSpecIdx(null);
-                                  }
-                                }}
-                              />
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0"
-                                onClick={() => {
-                                  if (editingSpecName.trim()) {
-                                    setSettings((s) => {
-                                      const newList = [...(s.specialization_list || [])];
-                                      newList[idx] = editingSpecName.trim();
-                                      return { ...s, specialization_list: newList };
-                                    });
-                                    setEditingSpecIdx(null);
-                                  }
-                                }}
-                              >
-                                <Save className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                className="h-8 w-8 p-0"
-                                onClick={() => setEditingSpecIdx(null)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              <span className="text-sm font-medium">{spec}</span>
-                              <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => {
-                                    setEditingSpecIdx(idx);
-                                    setEditingSpecName(spec);
-                                  }}
-                                >
-                                  <Edit2 className="h-4 w-4 text-gray-500 hover:text-blue-500" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50"
-                                  onClick={() => {
-                                    setSettings((s) => ({
-                                      ...s,
-                                      specialization_list: (s.specialization_list || []).filter((_, i) => i !== idx),
-                                    }));
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
-                      {(!settings.specialization_list || settings.specialization_list.length === 0) && (
-                        <div className="p-4 text-center text-sm text-gray-500">
-                          No specializations found.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
 
               <div className="pt-6 border-t border-gray-100 mt-8">
