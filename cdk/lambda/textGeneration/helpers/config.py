@@ -1,5 +1,6 @@
 import logging
 import boto3
+import os
 from helpers.crud import fetch_system_config
 
 logger = logging.getLogger(__name__)
@@ -12,8 +13,13 @@ _CONFIG_LOADED = False
 # ------------------------------------------------------------------
 
 KB_ID = None
-MODEL_ARN = "anthropic.claude-3-sonnet-20240229-v1:0"
-BEDROCK_REGION = "ca-central-1"
+MODEL_ARN = os.getenv(
+    "BEDROCK_MODEL_ID",
+    "us.anthropic.claude-sonnet-4-6"
+)
+
+REGION = os.getenv("REGION", "ca-central-1")
+LLM_REGION = os.getenv("LLM_REGION", "us-east-1")
 
 # Chat Configuration
 DAILY_TOKEN_LIMIT = 10000

@@ -15,14 +15,13 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int, s
     # 2. Set mode based on history
     if exchange_count < config.MIN_EXCHANGES_BEFORE_SUGGEST:
         phase_instructions = config.DETECTIVE_PHASE_PROMPT
-        retrieval_count = 1
+        retrieval_count = 5
         phase_name = "DETECTIVE"
     else:
         phase_instructions = config.SUGGESTION_PHASE_PROMPT
-        retrieval_count = 8
+        retrieval_count = 50
         phase_name = "SUGGESTION"
 
-    # 3. Construct full prompt with XML structure (guardrails last for Anthropic compliance)
     full_prompt = f"""<role>
 {config.ROLE}
 </role>
@@ -35,16 +34,17 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int, s
 {config.CHECKLIST}
 </checklist>
 
-<instructions>
-{config.INSTRUCTIONS}
-</instructions>
-
 <allowed_specializations>
 {config.SPEC_PROMPT}
 </allowed_specializations>
 
+<instructions>
+{config.INSTRUCTIONS}
+</instructions>
+
 <guardrails>
 {config.GUARDRAILS}
-</guardrails>""".strip()
+</guardrails>
+""".strip()
 
     return full_prompt, retrieval_count, phase_name
