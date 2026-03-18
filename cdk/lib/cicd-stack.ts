@@ -74,7 +74,7 @@ export class CICDStack extends cdk.Stack {
       this,
       "GitHubConnection",
       {
-        connectionName: `${id}-github-connection`,
+        connectionName: `${id}-github-conn`,
         providerType: "GitHub",
       }
     );
