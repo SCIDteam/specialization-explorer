@@ -146,7 +146,7 @@ def _call_llm_verifier(
     query: str,
     answer_text: str,
     sources: List[Dict[str, Any]],
-    bedrock_region: str,
+    llm_region: str,
     verifier_model_id: str,
     max_tokens: int = 700,
 ) -> Dict[str, Any]:
@@ -156,7 +156,7 @@ def _call_llm_verifier(
         sources=sources,
     )
 
-    bedrock = boto3.client("bedrock-runtime", region_name=bedrock_region)
+    bedrock = boto3.client("bedrock-runtime", region_name=llm_region)
 
     try:
         response = bedrock.converse(
@@ -272,7 +272,7 @@ def assess_response(
     query: str,
     answer_text: str,
     sources: List[Dict[str, Any]],
-    bedrock_region: str,
+    llm_region: str,
     verifier_model_id: str,
 ) -> Dict[str, Any]:
     """
@@ -282,7 +282,7 @@ def assess_response(
     - query: user question
     - answer_text: generated model answer
     - sources: retrieved source chunks
-    - bedrock_region: AWS region for runtime
+    - llm_region: AWS region for runtime
     - verifier_model_id: model used for the verifier call
 
     Returns:
@@ -322,7 +322,7 @@ def assess_response(
         query=query,
         answer_text=answer_text,
         sources=sources,
-        bedrock_region=bedrock_region,
+        llm_region=llm_region,
         verifier_model_id=verifier_model_id,
     )
 

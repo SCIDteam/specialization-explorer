@@ -1,7 +1,7 @@
-
 import boto3
 import logging
 from typing import Dict, Any, Optional, List, Tuple
+
 from helpers.crud import (
     fetch_recent_messages, ensure_session_exists, insert_message, update_last_active_session
 )
@@ -17,11 +17,11 @@ logger.setLevel(logging.INFO)
 def _rewrite_query_for_retrieval(
     raw_query: str,
     chat_history: List[Dict[str, Any]],
-    bedrock_region: str,
-    model_arn: str
+    llm_region: str,
+    haiku_model_arn: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0" 
 ) -> str:
     """
-    Uses a fast LLM call to rewrite a conversational user query into a
+    Uses a fast, low-cost LLM call to rewrite a conversational user query into a
     keyword-rich search query optimized for vector database retrieval.
     Falls back to the raw query on any error.
     """
@@ -32,31 +32,35 @@ def _rewrite_query_for_retrieval(
         history_lines.append(f"{role}: {msg['content']}")
     history_block = "\n".join(history_lines) if history_lines else "(no prior conversation)"
 
-    rewrite_prompt = (
-        "You are a search query optimizer for a university specialization database. "
-        "Given the conversation history and the user's latest message, generate a short, "
-        "keyword-rich search query to find relevant university specialization documents. "
-        "Focus on academic subjects, career goals, and interests mentioned. "
-        "Output ONLY the search query — no explanation, no quotes."
-    )
+    rewrite_system_prompt = """
+<instructions>
+You are a search query optimizer for a university specialization database.
+Given the conversation history and the user's latest message, generate a short, keyword-rich search query to find relevant documents.
+Focus on academic subjects, degree requirements, career goals, and specific interests mentioned.
+Output ONLY the search query. Do not include explanations, preambles, or quotes.
+</instructions>
+"""
 
-    user_message = f"""<conversation_history>
+    user_message = f"""
+<conversation_history>
 {history_block}
 </conversation_history>
 
 <latest_user_message>
 {raw_query}
 </latest_user_message>
-
-Generate the optimized search query:"""
+"""
 
     try:
-        bedrock_runtime = boto3.client("bedrock-runtime", region_name=bedrock_region)
+        bedrock_runtime = boto3.client("bedrock-runtime", region_name=llm_region)
         response = bedrock_runtime.converse(
-            modelId=model_arn,
+            modelId=haiku_model_arn,
             messages=[{"role": "user", "content": [{"text": user_message}]}],
-            system=[{"text": rewrite_prompt}],
-            inferenceConfig={"maxTokens": 100, "temperature": 0.0}
+            system=[{"text": rewrite_system_prompt}],
+            inferenceConfig={
+                "maxTokens": 50,  
+                "temperature": 0.0
+            }
         )
         rewritten = response["output"]["message"]["content"][0]["text"].strip()
         logger.info(f"Query rewrite: '{raw_query}' -> '{rewritten}'")
@@ -68,7 +72,8 @@ Generate the optimized search query:"""
 def _prepare_conversation(
     query: str,
     knowledge_base_id: str,
-    bedrock_region: str,
+    region: str,
+    llm_region: str,
     chat_session_id: str,
     user_id: Optional[str],
     db_connection,
@@ -77,7 +82,7 @@ def _prepare_conversation(
 ) -> Tuple[List[Dict[str, Any]], str, List[Dict[str, Any]], str]:
     """
     Handles validation, history fetching, user msg saving, retrieval, and prompt construction.
-    Returns: (bedrock_messages, full_system_prompt, sources)
+    Returns: (bedrock_messages, full_system_prompt, sources, phase_name)
     """
     # Resolve dynamic defaults
     if search_type is None:
@@ -119,15 +124,14 @@ def _prepare_conversation(
     search_query = _rewrite_query_for_retrieval(
         raw_query=query,
         chat_history=raw_history,
-        bedrock_region=bedrock_region,
-        model_arn=config.MODEL_ARN
+        llm_region=llm_region
     )
 
     # 6. RAG Retrieval (using rewritten query)
     sources = retrieve_documents(
         search_query,
         knowledge_base_id,
-        bedrock_region,
+        region,
         num_retrieval_results,
         search_type=search_type
     )
@@ -167,7 +171,6 @@ def _prepare_conversation(
 
     return bedrock_messages, full_system_prompt, sources, phase_name
 
-
 def _save_ai_response(
     db_connection,
     chat_session_id: str,
@@ -176,12 +179,7 @@ def _save_ai_response(
     warning_text: Optional[str] = None,
 ):
     try:
-        sources_for_db = []
-        for s in sources:
-            s_copy = s.copy()
-            if 'content' in s_copy and isinstance(s_copy['content'], str):
-                s_copy['content'] = s_copy['content']
-            sources_for_db.append(s_copy)
+        sources_for_db = [{k: v for k, v in s.items() if k != "content"} for s in sources]
 
         insert_message(
             db_connection,
@@ -201,7 +199,8 @@ def get_response(
     query: str,
     knowledge_base_id: str,
     model_arn: str,
-    bedrock_region: str,
+    region: str,
+    llm_region: str,
     chat_session_id: str,
     user_id: Optional[str],
     db_connection,
@@ -229,7 +228,8 @@ def get_response(
         bedrock_messages, full_system_prompt, sources, phase_name = _prepare_conversation(
             query,
             knowledge_base_id,
-            bedrock_region,
+            region,
+            llm_region,
             chat_session_id,
             user_id,
             db_connection,
@@ -251,31 +251,93 @@ def get_response(
             "intervention": None,
         }
 
-    bedrock_runtime = boto3.client("bedrock-runtime", region_name=bedrock_region)
+    tool_config = {
+        "tools": [
+            {
+                "toolSpec": {
+                    "name": "generate_cited_response",
+                    "description": "Generates the response to the user and records the exact document indices used from the <retrieved_context> block.",
+                    "inputSchema": {
+                        "json": {
+                            "type": "object",
+                            "properties": {
+                                "answer_text": {
+                                    "type": "string",
+                                    "description": "The conversational response to the user. Do not include raw citation brackets like [Doc 1] in this string."
+                                },
+                                "cited_indices": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
+                                    "description": "An array of the integer indices (e.g., [1, 3]) corresponding to the <source_X> tags that were actively used to formulate the answer. Leave empty if no documents were used."
+                                }
+                            },
+                            "required": ["answer_text", "cited_indices"]
+                        }
+                    }
+                }
+            }
+        ],
+        "toolChoice": {
+            "tool": {"name": "generate_cited_response"}
+        }
+    }
+
+    request_payload = {
+        "modelId": model_arn,
+        "messages": bedrock_messages,
+        "system": [{"text": full_system_prompt}],
+        "inferenceConfig": {
+            "maxTokens": config.MAX_TOKENS,
+            "temperature": config.TEMPERATURE
+        },
+        "toolConfig": tool_config, 
+        "additionalModelRequestFields": {
+            "thinking": {"type": "disabled"},
+            "output_config": {"effort": "low"}
+        }
+    }
+
+    bedrock_runtime = boto3.client("bedrock-runtime", region_name=llm_region)
     
     answer_text = ""
-    warning_text = None
-    intervention_result = None
-
+    cited_indices = []
+    
     try:
-        response = bedrock_runtime.converse(
-            modelId=model_arn,
-            messages=bedrock_messages,
-            system=[{"text": full_system_prompt}],
-            inferenceConfig={"maxTokens": config.MAX_TOKENS, "temperature": config.TEMPERATURE, "topP": config.TOP_P}
-        )
-        answer_text = response["output"]["message"]["content"][0]["text"]
+        response = bedrock_runtime.converse(**request_payload)
+        content_blocks = response["output"]["message"]["content"]
+        
+        for block in content_blocks:
+            if "toolUse" in block and block["toolUse"]["name"] == "generate_cited_response":
+                tool_input = block["toolUse"]["input"]
+                answer_text = tool_input.get("answer_text", "")
+                cited_indices = tool_input.get("cited_indices", [])
+                break
+                
+        if not answer_text:
+            for block in content_blocks:
+                if "text" in block:
+                    answer_text += block["text"]
+                    
     except Exception as e:
         logger.error(f"Generation Failed: {e}")
         answer_text = "I encountered an error generating the response."
+        cited_indices = []
+
+    used_sources = []
+    for i, source in enumerate(sources, 1):
+        if i in cited_indices:
+            used_sources.append(source)
+
+    warning_text = None
+    intervention_result = None
 
     if phase_name == "SUGGESTION" and answer_text and not answer_text.startswith("I encountered an error"):
         try:
             intervention_result = assess_response(
                 query=query,
                 answer_text=answer_text,
-                sources=sources,
-                bedrock_region=bedrock_region,
+                sources=used_sources,
+                llm_region=llm_region,
                 verifier_model_id=model_arn,
             )
             warning_text = intervention_result.get("warning_text")
@@ -283,21 +345,27 @@ def get_response(
             logger.error(f"Intervention Failed: {e}")
             warning_text = None
             intervention_result = None
+            
+    if warning_text:
+        final_answer_text = f"{answer_text}\n\n{warning_text}"
+    else:
+        final_answer_text = answer_text
 
     _save_ai_response(
         db_connection,
         chat_session_id,
-        answer_text,
-        sources,
+        final_answer_text,
+        used_sources,
         warning_text
     )
 
-    if user_id and answer_text and not answer_text.startswith("I encountered an error"):
+    if user_id and final_answer_text and not answer_text.startswith("I encountered an error"):
         usage_info = record_usage(user_id, answer_text, db_connection)
 
     return {
-        "response": answer_text,
-        "sources_used": sources,
+        "response": final_answer_text,
+        "raw_response": answer_text,
+        "sources_used": used_sources,
         "sessionId": chat_session_id,
         "is_first_message": False,
         "token_usage": usage_info,

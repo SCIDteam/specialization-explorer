@@ -955,6 +955,8 @@ export class ApiGatewayStack extends cdk.Stack {
           SM_DB_CREDENTIALS: db.secretPathUser.secretName,
           RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
           REGION: this.region,
+          LLM_REGION: "us-west-2",
+          BEDROCK_MODEL_ID: `us.anthropic.claude-sonnet-4-6`
         },
       }
     )
@@ -976,6 +978,7 @@ export class ApiGatewayStack extends cdk.Stack {
     const textGenBedrockPolicyStatement = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: [
+        "bedrock:GetInferenceProfile",
         "bedrock:InvokeModel",
         "bedrock:InvokeModelWithResponseStream", // Add streaming permission
         "bedrock:Retrieve", // Add Retrieve permission for Knowledge Base
@@ -987,6 +990,12 @@ export class ApiGatewayStack extends cdk.Stack {
         `arn:aws:bedrock:${this.region}::foundation-model/mistral.mistral-large-2402-v1:0`,
         // Claude Sonnet 3 (Direct Foundation Models)
         `arn:aws:bedrock:${this.region}::foundation-model/anthropic.claude-3-sonnet-20240229-v1:0`,
+        // Claude Sonnet 4.6 (Converse currently resolves this model in us-east-1)
+        `arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-sonnet-4-6`,
+        `arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6`,
+        // Claude Haiku 4.5 (Converse currently resolves this model in us-east-1)
+        `arn:aws:bedrock:*::foundation-model/anthropic.claude-haiku-4-5-20251001-v1:0`,
+        `arn:aws:bedrock:*:*:inference-profile/us.anthropic.claude-haiku-4-5-20251001-v1:0`,
         // Knowledge Base
         `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
       ],
