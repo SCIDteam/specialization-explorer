@@ -351,10 +351,7 @@ def get_response(
             warning_text = None
             intervention_result = None
             
-    if warning_text:
-        final_answer_text = f"{answer_text}\n\n{warning_text}"
-    else:
-        final_answer_text = answer_text
+    final_answer_text = answer_text
 
     _save_ai_response(
         db_connection,
