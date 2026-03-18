@@ -179,7 +179,12 @@ def _save_ai_response(
     warning_text: Optional[str] = None,
 ):
     try:
-        sources_for_db = [{k: v for k, v in s.items() if k != "content"} for s in sources]
+        sources_for_db = []
+        for s in sources:
+            s_copy = s.copy()
+            if 'content' in s_copy and isinstance(s_copy['content'], str):
+                s_copy['content'] = s_copy['content']
+            sources_for_db.append(s_copy)
 
         insert_message(
             db_connection,
