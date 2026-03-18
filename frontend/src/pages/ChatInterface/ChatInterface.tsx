@@ -511,9 +511,10 @@ export default function AIChatPage() {
   }, [isLoadingHistory, messages.length, activeChatSessionId, startConversation]);
 
   async function sendMessage() {
+    if (isStreaming) return;
+
     let text = message.trim();
     if (!text) return;
-
 
     // Ensure we have an active chat session
     if (!activeChatSessionId) return;
@@ -748,11 +749,15 @@ export default function AIChatPage() {
               <AiChatInput
                 value={message}
                 onChange={(val: string) => setMessage(val)}
-                placeholder={isTokenLimitReached
-                  ? `Daily limit reached. Resets at ${tokenResetTime || 'soon'}`
-                  : "Message Specialization Explorer..."}
+                placeholder={
+                  isTokenLimitReached
+                    ? `Daily limit reached. Resets at ${tokenResetTime || "soon"}`
+                    : isStreaming
+                      ? "Specialization Explorer is thinking..."
+                      : "Message Specialization Explorer..."
+                }
                 onSend={sendMessage}
-                disabled={isTokenLimitReached}
+                disabled={isTokenLimitReached || isStreaming}
               />
             </div>
 

@@ -164,6 +164,11 @@ export function AiChatInput({
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (disabled) {
+      e.preventDefault();
+      return;
+    }
+
     onKeyDown?.(e);
 
     // If parent didn't prevent default and it's Enter without Shift, trigger send
@@ -244,11 +249,15 @@ export function AiChatInput({
       )}
 
       <Button
-        onClick={onSend}
+        onClick={() => {
+          if (!disabled && value.trim()) {
+            onSend?.();
+          }
+        }}
         size="icon"
         variant="link"
         className="cursor-pointer absolute bottom-3 right-3 h-8 w-8 text-muted-foreground hover:text-gray-900 transition-colors"
-        disabled={disabled}
+        disabled={disabled || !value.trim()}
       >
         <Send className="h-4 w-4" />
       </Button>
