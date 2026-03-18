@@ -150,6 +150,10 @@ def fetch_system_config(db_connection) -> Dict[str, Any]:
                        max_characters_per_ai_message,
                        temperature,
                        top_p,
+                       support_score_threshold,
+                       scope_alignment_score_threshold,
+                       grounded_threshold,
+                       partially_grounded_threshold,
                        specialization_list
                 FROM system_settings
                 ORDER BY updated_at DESC
@@ -164,7 +168,11 @@ def fetch_system_config(db_connection) -> Dict[str, Any]:
                     'max_characters_per_ai_message': row[3],
                     'temperature': float(row[4]) if row[4] is not None else 0.7,
                     'top_p': float(row[5]) if row[5] is not None else 0.9,
-                    'specialization_list': row[6]
+                    'support_score_threshold': float(row[6]) if row[6] is not None else 0.25,
+                    'scope_alignment_score_threshold': float(row[7]) if row[7] is not None else 0.25,
+                    'grounded_threshold': float(row[8]) if row[8] is not None else 0.75,
+                    'partially_grounded_threshold': float(row[9]) if row[9] is not None else 0.50,
+                    'specialization_list': row[10]
                 }
     except Exception as e:
         logger.error(f"fetch_system_config failed: {e}")

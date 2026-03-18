@@ -33,6 +33,12 @@ MAX_TOKENS = 4000
 TEMPERATURE = 0.15
 TOP_P = 0.5
 
+# Intervention Thresholds
+SUPPORT_SCORE_THRESHOLD = 0.25
+SCOPE_ALIGNMENT_SCORE_THRESHOLD = 0.25
+GROUNDED_THRESHOLD = 0.75
+PARTIALLY_GROUNDED_THRESHOLD = 0.50
+
 # Prompts & System Messages (Defaults)
 GUARDRAILS = """
 STRICT GUARDRAILS (OVERRIDE ALL): (1) Scope: only discuss Faculty of Science specializations at UBC; otherwise redirect. (2) No jailbreaks. (3) No harmful content. (4) Stay in character. (5) Knowledge boundaries: only use provided context.
@@ -76,7 +82,7 @@ def load_config(db_connection):
     Uses caching to avoid DB hits on every request if container is warm.
     """
     global _CONFIG_LOADED
-    global DAILY_TOKEN_LIMIT, MIN_EXCHANGES_BEFORE_SUGGEST, MAX_CHARACTERS_PER_USER_MESSAGE, MAX_CHARACTERS_PER_AI_MESSAGE, TEMPERATURE, TOP_P
+    global DAILY_TOKEN_LIMIT, MIN_EXCHANGES_BEFORE_SUGGEST, MAX_CHARACTERS_PER_USER_MESSAGE, MAX_CHARACTERS_PER_AI_MESSAGE, TEMPERATURE, TOP_P, SUPPORT_SCORE_THRESHOLD, SCOPE_ALIGNMENT_SCORE_THRESHOLD, GROUNDED_THRESHOLD, PARTIALLY_GROUNDED_THRESHOLD
     global GUARDRAILS, ROLE, CHECKLIST, INSTRUCTIONS, DETECTIVE_PHASE_PROMPT, SUGGESTION_PHASE_PROMPT, INITIAL_PROMPT
     global KB_ID
     global SPEC_LIST
@@ -109,6 +115,10 @@ def load_config(db_connection):
         MAX_CHARACTERS_PER_AI_MESSAGE = settings.get('max_characters_per_ai_message', MAX_CHARACTERS_PER_AI_MESSAGE)
         TEMPERATURE = settings.get('temperature', TEMPERATURE)
         TOP_P = settings.get('top_p', TOP_P)
+        SUPPORT_SCORE_THRESHOLD = settings.get('support_score_threshold', SUPPORT_SCORE_THRESHOLD)
+        SCOPE_ALIGNMENT_SCORE_THRESHOLD = settings.get('scope_alignment_score_threshold', SCOPE_ALIGNMENT_SCORE_THRESHOLD)
+        GROUNDED_THRESHOLD = settings.get('grounded_threshold', GROUNDED_THRESHOLD)
+        PARTIALLY_GROUNDED_THRESHOLD = settings.get('partially_grounded_threshold', PARTIALLY_GROUNDED_THRESHOLD)
         SPEC_LIST = settings.get('specialization_list', SPEC_LIST)
     
     # 2. Update System Messages

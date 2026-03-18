@@ -2,8 +2,8 @@ import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
-
 import boto3
+import helpers.config as config
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -238,15 +238,15 @@ def _label_from_scores(
     - otherwise use final score bands
     - if the verifier already said unsupported, keep it conservative
     """
-    if support_score < 0.25 or scope_alignment_score < 0.25:
+    if support_score < config.SUPPORT_SCORE_THRESHOLD or scope_alignment_score < config.SCOPE_ALIGNMENT_SCORE_THRESHOLD:
         return "unsupported"
 
     if llm_label == "unsupported":
         return "unsupported"
 
-    if final_score >= 0.80:
+    if final_score >= config.GROUNDED_THRESHOLD:
         return "grounded"
-    if final_score >= 0.50:
+    if final_score >= config.PARTIALLY_GROUNDED_THRESHOLD:
         return "partially_grounded"
     return "unsupported"
 
