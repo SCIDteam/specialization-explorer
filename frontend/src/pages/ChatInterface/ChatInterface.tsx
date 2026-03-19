@@ -696,7 +696,7 @@ export default function AIChatPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] w-full">
+    <div className="flex flex-col h-full min-h-0 w-full">
       {messages.length === 0 ? (
         // Empty state (Centered)
         <div className="flex-1 flex flex-col items-center justify-center text-center pb-12 w-full max-w-2xl 2xl:max-w-3xl mx-auto px-4">
@@ -706,7 +706,7 @@ export default function AIChatPage() {
         </div>
       ) : (
         // Scrollable messages area (Full width for edge scrollbar)
-        <div className="flex-1 overflow-y-auto w-full">
+        <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-invisible w-full">
           <div className="w-full max-w-2xl 2xl:max-w-3xl mx-auto flex flex-col gap-4 pt-4 pb-2 px-4">
             {isLoadingHistory ? (
               <div className="flex items-center justify-center py-8">
@@ -724,7 +724,7 @@ export default function AIChatPage() {
       )}
 
       {/* Statically bolted input area at the bottom */}
-      <div className="shrink-0 w-full bg-background pt-2 pb-4">
+      <div className="shrink-0 w-full border-t border-border/100 bg-background pt-6 pb-6 md:pb-5">
         <div className="w-full max-w-2xl 2xl:max-w-3xl mx-auto px-4">
           <div className="relative mb-2">
             <AiChatInput

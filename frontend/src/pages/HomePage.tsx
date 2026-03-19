@@ -3,7 +3,7 @@ import { Outlet, useNavigate } from "react-router";
 import { ViewProvider } from "@/providers/ViewContext";
 import { SidebarProvider } from "@/providers/SidebarContext";
 import SideBar from "@/components/ChatInterface/SideBar";
-import Footer from "@/components/Footer";
+// import Footer from "@/components/Footer";
 import type { ChatSession } from "@/providers/view";
 import { useUser } from "@/providers/user";
 import { Button } from "@/components/ui/button";
@@ -488,10 +488,14 @@ export default function HomePage() {
       }}
     >
       <SidebarProvider>
-        <div className="flex flex-col min-h-screen bg-background">
+        <div className="flex flex-col h-full bg-background overflow-hidden">
           <SideBar />
-          <div className="md:ml-64 flex flex-col flex-1">
-            <main className="flex-1 flex flex-col items-center justify-center max-w-screen px-4">
+          <div className="md:ml-64 flex flex-col flex-1 min-h-0">
+            <main
+              className={`flex-1 flex flex-col items-center max-w-screen px-4 min-h-0 ${
+                activeChatSessionId ? "justify-start overflow-hidden" : "justify-center"
+              }`}
+            >
               {!activeChatSessionId ? (
                 <div className="w-full max-w-2xl text-center">
                   <h1 className="text-3xl md:text-4xl font-bold mb-4 leading-tight">
@@ -519,7 +523,7 @@ export default function HomePage() {
                 <Outlet />
               )}
             </main>
-            <Footer />
+            {/* <Footer /> */}
           </div>
 
           <Dialog open={showEmailModal}>
