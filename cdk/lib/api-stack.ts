@@ -444,7 +444,7 @@ export class ApiGatewayStack extends cdk.Stack {
           },
         },
 
-        // Rule 4: Very strict limit for expensive AI endpoints (50 req/5min per IP)
+        // Rule 4: Moderate limit for expensive AI endpoints (500 req/5min per IP)
         {
           name: "LimitExpensiveEndpoints",
           priority: 4,
@@ -453,7 +453,7 @@ export class ApiGatewayStack extends cdk.Stack {
           },
           statement: {
             rateBasedStatement: {
-              limit: 20, // 20 reqs / 5 mins prevents bots while allowing fast human chat
+              limit: 1000, // 500 reqs / 5 mins prevents abuse while allowing rapid conversational flow
               aggregateKeyType: "IP",
               scopeDownStatement: {
                 // Apply to chat_sessions endpoints
@@ -486,12 +486,38 @@ export class ApiGatewayStack extends cdk.Stack {
     this.api.addGatewayResponse(`${id}-WafBlockResponse`, {
       type: apigateway.ResponseType.WAF_FILTERED,
       statusCode: "429",
+      responseHeaders: {
+        "Access-Control-Allow-Origin": "'*'",
+        "Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+        "Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE'",
+      },
       templates: {
         "application/json": JSON.stringify({
           error: "Rate limit exceeded. Please wait a few minutes before chatting again."
         })
       }
     });
+
+    // Add Default 4XX Gateway Response to prevent CORS errors on bad requests
+    this.api.addGatewayResponse(`${id}-Default4XXResponse`, {
+      type: apigateway.ResponseType.DEFAULT_4XX,
+      responseHeaders: {
+        "Access-Control-Allow-Origin": "'*'",
+        "Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+        "Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE'",
+      },
+    });
+
+    // Add Default 5XX Gateway Response to prevent CORS errors on server errors (like Throttling)
+    this.api.addGatewayResponse(`${id}-Default5XXResponse`, {
+      type: apigateway.ResponseType.DEFAULT_5XX,
+      responseHeaders: {
+        "Access-Control-Allow-Origin": "'*'",
+        "Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
+        "Access-Control-Allow-Methods": "'OPTIONS,GET,PUT,POST,DELETE'",
+      },
+    });
+
     const wafAssociation = new wafv2.CfnWebACLAssociation(
       this,
       `${id}-waf-association`,
