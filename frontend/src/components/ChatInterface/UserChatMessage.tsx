@@ -3,12 +3,9 @@ import { Card, CardContent } from "@/components/ui/card";
 // Props for saving a user's message as a shared prompt
 type UserChatMessageProps = {
   text: string;
-  messageTime?: number;
-  initialLoadTime?: number | null;
-  id?: string;
 };
 
-export default function UserChatMessage({ text, messageTime, initialLoadTime, id }: UserChatMessageProps) {
+export default function UserChatMessage({ text }: UserChatMessageProps) {
   return (
     // main msg container
     <div className="flex flex-col items-end gap-1 group">

@@ -680,9 +680,6 @@ export default function AIChatPage() {
         <UserChatMessage
           key={message.id}
           text={message.text}
-          messageTime={message.time}
-          initialLoadTime={initialMessageLoadTime}
-          id={message.id}
         />
       );
     } else {
@@ -693,9 +690,6 @@ export default function AIChatPage() {
           sources={message.sources_used}
           warning={message.warning}
           isTyping={message.isTyping}
-          messageTime={message.time}
-          initialLoadTime={initialMessageLoadTime}
-          id={message.id}
         />
       );
     }

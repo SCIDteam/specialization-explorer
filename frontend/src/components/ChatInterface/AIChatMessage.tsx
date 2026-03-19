@@ -13,9 +13,6 @@ type AIChatMessageProps = {
   sources?: any[];
   warning?: string | null;
   isTyping?: boolean;
-  messageTime?: number;
-  initialLoadTime?: number | null;
-  id?: string;
 };
 
 export default function AIChatMessage({
@@ -23,9 +20,6 @@ export default function AIChatMessage({
   sources = [],
   warning = null,
   isTyping = false,
-  messageTime,
-  initialLoadTime,
-  id,
 }: AIChatMessageProps) {
   const [showSources, setShowSources] = useState(false);
 
