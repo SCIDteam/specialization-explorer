@@ -238,12 +238,12 @@ export default function DataSourceManagement() {
     try {
       setWebUrlStatus({ type: null, message: "" });
 
-      if (!webUrl || !/^https?:\/\//.test(webUrl)) {
+      if (!webUrl || !/^https?:\/\//.test(webUrl.trim())) {
         setWebUrlStatus({
           type: "error",
           message: "Please enter a valid URL (must start with http:// or https://).",
         });
-        return; // finally will still run
+        return;
       }
 
       const include_patterns = parsePatterns(includePatternsText);
@@ -253,7 +253,7 @@ export default function DataSourceManagement() {
       const token = session.tokens.idToken;
 
       const res = await fetch(
-        `${import.meta.env.VITE_API_ENDPOINT}/admin/data_source/website`,
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/data_sources/website`,
         {
           method: "POST",
           headers: {
@@ -265,23 +265,21 @@ export default function DataSourceManagement() {
             include_patterns,
             exclude_patterns,
             created_by: adminEmail,
-            metadata: {}, // optional
+            metadata: {},
           }),
         }
       );
 
+      const responseJson = await res.json().catch(() => ({}));
+
       if (!res.ok) {
-        let msg = "Failed to add URL";
-        try {
-          const errJson = await res.json();
-          msg = errJson?.message || msg;
-        } catch {
-          // ignore
-        }
-        throw new Error(msg);
+        throw new Error(responseJson?.error || responseJson?.message || "Failed to add URL");
       }
 
-      setWebUrlStatus({ type: "success", message: "URL added successfully." });
+      setWebUrlStatus({
+        type: "success",
+        message: responseJson?.message || "URL added successfully.",
+      });
 
       await fetchAdminDataSources();
 
