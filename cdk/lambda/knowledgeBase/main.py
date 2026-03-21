@@ -12,35 +12,39 @@ logger.setLevel(logging.INFO)
 
 # Environment variables
 DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
+# TODO: will be an evironment variable passed in from API stack with Knowledge Base stack is completed
+KB_SECRET_NAME = "SpecEx/KnowledgeBase/Id"
 REGION = os.environ["REGION"]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
 
 # Cached resources
 connection = None
-db_secret = None
+secret_cache = {}
 
 # AWS Clients
 secrets_manager_client = boto3.client("secretsmanager", region_name=REGION)
 
-def _get_secret(secret_name, expect_json=True):
-    global db_secret
-    if db_secret is None:
-        try:
-            response = secrets_manager_client.get_secret_value(SecretId=secret_name)["SecretString"]
-            db_secret = json.loads(response) if expect_json else response
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to decode JSON for secret: {e}")
-            raise ValueError(f"Secret is not properly formatted as JSON.")
-        except Exception as e:
-            logger.error(f"Error fetching secret: {e}")
-            raise
-    return db_secret
+def _get_secret(secret_name: str, expect_json: bool = True):
+    if secret_name in secret_cache:
+        return secret_cache[secret_name]
+
+    try:
+        response = secrets_manager_client.get_secret_value(SecretId=secret_name)["SecretString"]
+        value = json.loads(response) if expect_json else response
+        secret_cache[secret_name] = value
+        return value
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to decode JSON for secret '{secret_name}': {e}")
+        raise ValueError(f"Secret '{secret_name}' is not properly formatted as JSON.")
+    except Exception as e:
+        logger.error(f"Error fetching secret '{secret_name}': {e}")
+        raise
 
 def _connect_to_db():
     global connection
     if connection is None or connection.closed:
         try:
-            db_secret = _get_secret(DB_SECRET_NAME)
+            db_secret = _get_secret(DB_SECRET_NAME, expect_json=True)
             connection_params = {
                 'dbname': db_secret["dbname"],
                 'user': db_secret["username"],
@@ -108,7 +112,6 @@ def handler(event, context=None):
         
         # connect to database
         try:
-            # db_secret = _get_secret(DB_SECRET_NAME)
             connection = _connect_to_db()
         except Exception as e:
             logger.error(f"Error connecting to database: {e}")
@@ -122,13 +125,29 @@ def handler(event, context=None):
                 },
                 'body': json.dumps({"error": "Error connecting to database"})
             }
+        
+        # get knowledge base ID
+        try:
+            kb_id = _get_secret(KB_SECRET_NAME, expect_json=False)
+        except Exception as e:
+            logger.error(f"Error getting knowledge base ID: {e}")
+            return {
+                'statusCode': 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                'body': json.dumps({"error": "Error getting knowledge base ID"})
+            }
 
         # Route: POST /admin/data_sources/website
         if method == "POST" and (
             resource == "/admin/data_sources/website"
             or path.endswith("/admin/data_sources/website")
         ):
-            return add_website(event=event, body=body, connection=connection)
+            return add_website(event=event, body=body, connection=connection, kb_id=kb_id)
 
         return _response(
             404,
