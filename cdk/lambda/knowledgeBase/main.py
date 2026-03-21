@@ -1,11 +1,63 @@
+import os
 import json
+import boto3
 import logging
+import psycopg2
 
 from helpers.add_website import add_website
 
+# Set up logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
+# Environment variables
+DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
+REGION = os.environ["REGION"]
+RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
+
+# Cached resources
+connection = None
+db_secret = None
+
+# AWS Clients
+secrets_manager_client = boto3.client("secretsmanager", region_name=REGION)
+
+def _get_secret(secret_name, expect_json=True):
+    global db_secret
+    if db_secret is None:
+        try:
+            response = secrets_manager_client.get_secret_value(SecretId=secret_name)["SecretString"]
+            db_secret = json.loads(response) if expect_json else response
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to decode JSON for secret: {e}")
+            raise ValueError(f"Secret is not properly formatted as JSON.")
+        except Exception as e:
+            logger.error(f"Error fetching secret: {e}")
+            raise
+    return db_secret
+
+def _connect_to_db():
+    global connection
+    if connection is None or connection.closed:
+        try:
+            db_secret = _get_secret(DB_SECRET_NAME)
+            connection_params = {
+                'dbname': db_secret["dbname"],
+                'user': db_secret["username"],
+                'password': db_secret["password"],
+                'host': RDS_PROXY_ENDPOINT,
+                'port': db_secret["port"]
+            }
+            connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
+            connection = psycopg2.connect(connection_string)
+            logger.info("Connected to the database!")
+        except Exception as e:
+            logger.error(f"Failed to connect to database: {e}")
+            if connection:
+                connection.rollback()
+                connection.close()
+            raise
+    return connection
 
 def _response(status_code: int, body: dict):
     return {
@@ -53,13 +105,30 @@ def handler(event, context=None):
             body = _parse_body(event)
         except ValueError as e:
             return _response(400, {"error": str(e)})
+        
+        # connect to database
+        try:
+            # db_secret = _get_secret(DB_SECRET_NAME)
+            connection = _connect_to_db()
+        except Exception as e:
+            logger.error(f"Error connecting to database: {e}")
+            return {
+                'statusCode': 500,
+                "headers": {
+                    "Content-Type": "application/json",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Origin": "*",
+                    "Access-Control-Allow-Methods": "*",
+                },
+                'body': json.dumps({"error": "Error connecting to database"})
+            }
 
         # Route: POST /admin/data_sources/website
         if method == "POST" and (
             resource == "/admin/data_sources/website"
             or path.endswith("/admin/data_sources/website")
         ):
-            return add_website(event=event, body=body)
+            return add_website(event=event, body=body, connection=connection)
 
         return _response(
             404,

@@ -18,7 +18,7 @@ def _response(status_code: int, body: dict):
     }
 
 
-def add_website(event, body):
+def add_website(event, body, connection):
     name = body.get("name")
     include_patterns = body.get("include_patterns", [])
     exclude_patterns = body.get("exclude_patterns", [])
