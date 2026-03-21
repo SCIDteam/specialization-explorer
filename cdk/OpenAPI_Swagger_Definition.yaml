@@ -348,81 +348,66 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /admin/data_source/{data_source_type}:
+  /admin/data_sources/website:
     <<: *commonOptions
     post:
       tags: [Admin]
-      summary: Create a data source (website/csv/json)
-      operationId: create_admin_data_source_by_type
+      summary: Add website data source
+      operationId: add_website_data_source
       security:
         - adminAuthorizer: []
-      parameters:
-        - name: data_source_type
-          in: path
-          required: true
-          description: Type of data source to create
-          schema:
-            type: string
-            enum: [website, csv, json]
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [name]
+              required:
+                - name
+                - created_by
               properties:
                 name:
                   type: string
-                  description: File name (csv/json) or URL (website)
+                  example: https://example.com
                 include_patterns:
                   type: array
-                  nullable: true
-                  description: Optional regex include rules (mainly for websites). One regex per entry.
                   items:
                     type: string
                 exclude_patterns:
                   type: array
-                  nullable: true
-                  description: Optional regex exclude rules (mainly for websites). One regex per entry.
                   items:
                     type: string
-                metadata:
-                  type: object
-                  nullable: true
-                  description: Optional JSON metadata for the data source
-                  additionalProperties: true
+                created_by:
+                  type: string
+                  example: example@email.com
       responses:
-        "201":
-          description: Created
+        "200":
+          description: Website data source request accepted
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  data_source:
-                    type: object
-                    properties:
-                      id: { type: string }
-                      name: { type: string }
-                      type:
-                        type: string
-                        enum: [website, csv, json]
-                      created_at: { type: string }
-                      metadata:
-                        type: object
-                        additionalProperties: true
-                      include_patterns:
-                        type: array
-                        nullable: true
-                        items: { type: string }
-                      exclude_patterns:
-                        type: array
-                        nullable: true
-                        items: { type: string }
-        "400": { description: Bad Request }
-        "401": { description: Unauthorized }
-        "500": { description: Internal Server Error }
+                  message:
+                    type: string
+                  name:
+                    type: string
+                  include_patterns:
+                    type: array
+                    items:
+                      type: string
+                  exclude_patterns:
+                    type: array
+                    items:
+                      type: string
+                  created_by:
+                    type: string
+        "400":
+          description: Invalid request
+        "404":
+          description: Route not found
+        "500":
+          description: Internal Server Error
       x-amazon-apigateway-integration:
         uri:
           Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations

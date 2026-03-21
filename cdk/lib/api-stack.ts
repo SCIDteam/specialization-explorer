@@ -1052,6 +1052,8 @@ export class ApiGatewayStack extends cdk.Stack {
       role: lambdaRole,
       tracing: lambda.Tracing.ACTIVE,
       environment: {
+        SM_DB_CREDENTIALS: db.secretPathUser.secretName,
+        RDS_PROXY_ENDPOINT: db.rdsProxyEndpoint,
         REGION: this.region,
       },
     });
@@ -1062,7 +1064,7 @@ export class ApiGatewayStack extends cdk.Stack {
     lambdaKnowledgeBase.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
-      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/knowledge_base*`,
+      sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin/data_sources/*`,
     });
 
     lambdaKnowledgeBase.addToRolePolicy(
