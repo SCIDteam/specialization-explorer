@@ -1047,9 +1047,10 @@ export class ApiGatewayStack extends cdk.Stack {
       handler: "main.handler",
       code: lambda.Code.fromAsset("lambda/knowledgeBase"),
       timeout: Duration.seconds(300),
+      role: lambdaRole,
+      layers: [psycopgLayer],
       memorySize: 512,
       vpc: vpcStack.vpc,
-      role: lambdaRole,
       tracing: lambda.Tracing.ACTIVE,
       environment: {
         SM_DB_CREDENTIALS: db.secretPathUser.secretName,
