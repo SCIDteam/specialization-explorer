@@ -250,8 +250,6 @@ export class CICDStack extends cdk.Stack {
 
       this.buildProjects[lambda.name] = buildProject;
 
-      // Grant permissions to push to ECR
-      ecrRepo.grantPullPush(buildProject);
 
       // Add build action to the list
       buildActions.push(

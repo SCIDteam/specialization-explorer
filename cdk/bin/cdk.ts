@@ -6,6 +6,7 @@ import { ApiGatewayStack } from "../lib/api-stack";
 import { DBFlowStack } from "../lib/dbFlow-stack";
 import { AmplifyStack } from "../lib/amplify-stack";
 import { CICDStack } from "../lib/cicd-stack";
+import { KnowledgeBaseStack } from "../lib/knowledge-base-stack";
 
 const app = new cdk.App();
 
@@ -55,6 +56,11 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
   ],
 });
 
+const kbStack = new KnowledgeBaseStack(app, `${StackPrefix}-KnowledgeBase`, {
+  env,
+  stackPrefix: StackPrefix,
+});
+
 const apiStack = new ApiGatewayStack(
   app,
   `${StackPrefix}-Api`,
@@ -66,6 +72,7 @@ const apiStack = new ApiGatewayStack(
     codeBuildProjects: cicdStack.buildProjects,
   }
 );
+apiStack.addDependency(kbStack);
 apiStack.addDependency(cicdStack);
 
 const amplifyStack = new AmplifyStack(app, `${StackPrefix}-Amplify`, apiStack, {
@@ -87,6 +94,7 @@ const stacks = [
   dbStack,
   dbFlowStack,
   cicdStack,
+  kbStack,
   apiStack,
   amplifyStack,
 ];

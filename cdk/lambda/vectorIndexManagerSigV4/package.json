@@ -1,0 +1,10 @@
+{
+  "name": "vector-index-manager-sigv4",
+  "version": "1.0.0",
+  "private": true,
+  "main": "main.js",
+  "dependencies": {
+    "@aws-sdk/credential-provider-node": "^3.922.0",
+    "@opensearch-project/opensearch": "^3.4.0"
+  }
+}
