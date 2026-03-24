@@ -5,6 +5,7 @@ import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as opensearchserverless from "aws-cdk-lib/aws-opensearchserverless";
 import { Construct } from "constructs";
 import {
@@ -28,6 +29,8 @@ const COHERE_V3_DIMENSIONS = 1024;
 
 export interface KnowledgeBaseStackProps extends StackProps {
   stackPrefix: string;
+  vectorIndexManagerRepository: ecr.IRepository;
+  vectorIndexManagerPipelineName: string;
 }
 
 export class KnowledgeBaseStack extends Stack {
@@ -151,15 +154,62 @@ export class KnowledgeBaseStack extends Stack {
     // Grant Bedrock role permissions to read from S3
     this.knowledgeBaseBucket.grantRead(knowledgeBaseRole);
 
+    // Ensure the vector index manager container image exists in ECR before creating the image-based Lambda.
+    const ecrImageWaiterRole = new iam.Role(this, "KBEcrImageWaiterRole", {
+      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
+    });
+
+    ecrImageWaiterRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ecr:DescribeImages", "ecr:DescribeRepositories", "ecr:BatchGetImage"],
+      resources: [props.vectorIndexManagerRepository.repositoryArn],
+    }));
+
+    ecrImageWaiterRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["codepipeline:StartPipelineExecution"],
+      resources: [
+        `arn:aws:codepipeline:${this.region}:${this.account}:${props.vectorIndexManagerPipelineName}`,
+      ],
+    }));
+
+    ecrImageWaiterRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
+      resources: ["arn:aws:logs:*:*:*"],
+    }));
+
+    const ecrImageWaiterFn = new lambda.Function(this, "KBEcrImageWaiterFn", {
+      runtime: lambda.Runtime.NODEJS_22_X,
+      handler: "index.handler",
+      role: ecrImageWaiterRole,
+      timeout: cdk.Duration.minutes(15),
+      code: lambda.Code.fromAsset("lambda/ecrImageWaiter"),
+    });
+
+    const ecrImageWaiter = new cdk.CustomResource(this, "KBEcrImageWaiter", {
+      serviceToken: ecrImageWaiterFn.functionArn,
+      properties: {
+        RepositoryName: props.vectorIndexManagerRepository.repositoryName,
+        ImageTag: "latest",
+        MaxRetries: "28",
+        RetryDelaySeconds: "30",
+        CodePipelineName: props.vectorIndexManagerPipelineName,
+        TriggerBuildOnMissing: "true",
+      },
+    });
+
     // Vector Index Manager Lambda
-    const vectorIndexManagerFn = new lambda.Function(this, "VectorIndexManagerFn", {
-      runtime: lambda.Runtime.NODEJS_20_X,
-      handler: "main.handler",
+    const vectorIndexManagerFn = new lambda.DockerImageFunction(this, "VectorIndexManagerFn", {
       role: vectorIndexManagerRole,
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
-      code: lambda.Code.fromAsset("lambda/vectorIndexManagerSigV4"),
+      functionName: `${props.stackPrefix}-KnowledgeBase-VectorIndexManagerFn`,
+      code: lambda.DockerImageCode.fromEcr(props.vectorIndexManagerRepository, {
+        tagOrDigest: "latest",
+      }),
     });
+    vectorIndexManagerFn.node.addDependency(ecrImageWaiter);
 
     const vectorIndexProvider = new Provider(this, "VectorIndexProvider", {
       onEventHandler: vectorIndexManagerFn,
@@ -281,7 +331,7 @@ export class KnowledgeBaseStack extends Stack {
 
     // Store Knowledge Base ID in AWS Secrets Manager
     const knowledgeBaseIdSecret = new secretsmanager.Secret(this, "KnowledgeBaseIdSecret", {
-      secretName: `${props.stackPrefix}/KnowledgeBase/Id`,
+      secretName: `${props.stackPrefix}/KnowledgeBase/IdV2`,
       description: "The ID of the Bedrock Knowledge Base",
       secretStringValue: cdk.SecretValue.unsafePlainText(this.knowledgeBaseId),
     });

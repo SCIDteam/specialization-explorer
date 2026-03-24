@@ -18,14 +18,12 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as logs from "aws-cdk-lib/aws-logs";
-import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
-  codeBuildProjects?: { [key: string]: codebuild.IProject };
 }
 
 export class ApiGatewayStack extends cdk.Stack {
@@ -920,23 +918,6 @@ export class ApiGatewayStack extends cdk.Stack {
         resources: [`arn:aws:ecr:${this.region}:${this.account}:repository/*`],
       })
     );
-
-    // Allow triggering CodeBuild projects when images are missing
-    if (props.codeBuildProjects) {
-      const projectArns = Object.values(props.codeBuildProjects).map(
-        (proj) => proj.projectArn
-      );
-
-      if (projectArns.length > 0) {
-        ecrImageWaiterRole.addToPolicy(
-          new iam.PolicyStatement({
-            effect: iam.Effect.ALLOW,
-            actions: ["codebuild:StartBuild"],
-            resources: projectArns,
-          })
-        );
-      }
-    }
 
     ecrImageWaiterRole.addToPolicy(
       new iam.PolicyStatement({

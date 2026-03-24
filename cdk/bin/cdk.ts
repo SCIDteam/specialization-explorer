@@ -45,21 +45,23 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
   environmentName: environment,
   lambdaFunctions: [
     {
-      name: "textGeneration",
-      functionName: `${StackPrefix}-Api-TextGenLambdaDockerFunction`,
-      sourceDir: "cdk/lambda/textGeneration",
+      name: "vectorIndexManagerSigV4",
+      functionName: `${StackPrefix}-KnowledgeBase-VectorIndexManagerFn`,
+      sourceDir: "cdk/lambda/vectorIndexManagerSigV4",
     },
   ],
   pathFilters: [
-    "cdk/lambda/dataIngestion/**",
-    "cdk/lambda/textGeneration/**",
+    "cdk/lambda/vectorIndexManagerSigV4/**",
   ],
 });
 
 const kbStack = new KnowledgeBaseStack(app, `${StackPrefix}-KnowledgeBase`, {
   env,
   stackPrefix: StackPrefix,
+  vectorIndexManagerRepository: cicdStack.ecrRepositories["vectorIndexManagerSigV4"],
+  vectorIndexManagerPipelineName: cicdStack.pipelineName,
 });
+kbStack.addDependency(cicdStack);
 
 const apiStack = new ApiGatewayStack(
   app,
@@ -69,7 +71,6 @@ const apiStack = new ApiGatewayStack(
   {
     env,
     ecrRepositories: cicdStack.ecrRepositories,
-    codeBuildProjects: cicdStack.buildProjects,
   }
 );
 apiStack.addDependency(kbStack);
