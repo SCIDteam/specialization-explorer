@@ -1411,57 +1411,6 @@ exports.handler = async (event) => {
         response.body = "";
         break;
 
-      // PUT /admin/reported-items/prompt/{prompt_id}/dismiss - Dismiss a reported prompt
-      case "PUT /admin/reported-items/prompt/{prompt_id}/dismiss":
-        const dismissPromptId = event.pathParameters?.prompt_id;
-        if (!dismissPromptId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Prompt ID is required" });
-          break;
-        }
-
-        const dismissedPrompt = await sqlConnection`
-          UPDATE shared_user_prompts
-          SET reported = false
-          WHERE id = ${dismissPromptId}
-          RETURNING id
-        `;
-
-        if (dismissedPrompt.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Prompt not found" });
-          break;
-        }
-
-        response.statusCode = 200;
-        response.body = JSON.stringify({ message: "Prompt report dismissed" });
-        break;
-
-      // DELETE /admin/reported-items/prompt/{prompt_id} - Delete a reported prompt
-      case "DELETE /admin/reported-items/prompt/{prompt_id}":
-        const deletePromptId = event.pathParameters?.prompt_id;
-        if (!deletePromptId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Prompt ID is required" });
-          break;
-        }
-
-        const deletedPrompt = await sqlConnection`
-          DELETE FROM shared_user_prompts
-          WHERE id = ${deletePromptId}
-          RETURNING id
-        `;
-
-        if (deletedPrompt.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Prompt not found" });
-          break;
-        }
-
-        response.statusCode = 204;
-        response.body = "";
-        break;
-
       // Handle unsupported routes
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
