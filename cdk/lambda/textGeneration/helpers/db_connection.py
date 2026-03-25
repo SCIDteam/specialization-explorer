@@ -25,6 +25,7 @@ def get_secret():
         raise ValueError("SM_DB_CREDENTIALS environment variable not set")
 
     if DB_SECRET_NAME in secret_cache:
+        logger.info("Using cached database credentials")
         return secret_cache[DB_SECRET_NAME]
 
     try:
