@@ -5,6 +5,7 @@ import logging
 import psycopg2
 
 from helpers.add_website import add_website
+from helpers.update_status import update_status
 
 # Set up logging
 logger = logging.getLogger()
@@ -101,6 +102,17 @@ def handler(event, context=None):
     logger.info("Event: %s", json.dumps(event))
 
     try:
+        # EventBridge path
+        if event.get("source") == "aws.bedrock":
+            try:
+                connection = _connect_to_db()
+            except Exception as e:
+                logger.error(f"Error connecting to database: {e}")
+                return _response(500, {"error": "Error connecting to database"})
+
+            return update_status(event=event, connection=connection)
+
+        # API Gateway path
         method = event.get("httpMethod", "")
         resource = event.get("resource", "")
         path = event.get("path", "")
@@ -115,32 +127,14 @@ def handler(event, context=None):
             connection = _connect_to_db()
         except Exception as e:
             logger.error(f"Error connecting to database: {e}")
-            return {
-                'statusCode': 500,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
-                'body': json.dumps({"error": "Error connecting to database"})
-            }
+            return _response(500, {"error": "Error connecting to database"})
         
         # get knowledge base ID
         try:
             kb_id = _get_secret(KB_SECRET_NAME, expect_json=False)
         except Exception as e:
             logger.error(f"Error getting knowledge base ID: {e}")
-            return {
-                'statusCode': 500,
-                "headers": {
-                    "Content-Type": "application/json",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Origin": "*",
-                    "Access-Control-Allow-Methods": "*",
-                },
-                'body': json.dumps({"error": "Error getting knowledge base ID"})
-            }
+            return _response(500, {"error": "Error getting knowledge base ID"})
 
         # Route: POST /admin/data_sources/website
         if method == "POST" and (

@@ -22,6 +22,8 @@ import * as codebuild from "aws-cdk-lib/aws-codebuild";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
+import * as events from "aws-cdk-lib/aws-events";
+import * as targets from "aws-cdk-lib/aws-events-targets";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
@@ -1110,6 +1112,15 @@ export class ApiGatewayStack extends cdk.Stack {
         ],
       })
     );
+
+    // allows EventBridge to update status of ingestion jobs
+    const bedrockStatusRule = new events.Rule(this, `${id}-bedrockStatusRule`, {
+      eventPattern: {
+        source: ["aws.bedrock"],
+      },
+    });
+
+    bedrockStatusRule.addTarget(new targets.LambdaFunction(lambdaKnowledgeBase));
 
     const lambdaUserFunction = new lambda.Function(this, `${id}-userFunction`, {
       runtime: lambda.Runtime.NODEJS_22_X,
