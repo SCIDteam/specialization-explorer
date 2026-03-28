@@ -75,6 +75,7 @@ exports.up = (pgm) => {
       error_message text,
       created_at timestamptz DEFAULT now(),
       completed_at timestamptz
+      metadata jsonb DEFAULT '{}'
     );
 
     -- Chat Sessions
