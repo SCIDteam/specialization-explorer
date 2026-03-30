@@ -1187,10 +1187,6 @@ export class ApiGatewayStack extends cdk.Stack {
     });
 
 
-
-
-
-
     const lambdaChatSessionFunction = new lambda.Function(
       this,
       `${id}-chatSessionFunction`,
@@ -1211,8 +1207,6 @@ export class ApiGatewayStack extends cdk.Stack {
         tracing: lambda.Tracing.ACTIVE,
       }
     );
-
-
 
     // Allow API Gateway to invoke for shared chat endpoints (public access)
     lambdaChatSessionFunction.addPermission("AllowApiGatewayInvokeShared", {
