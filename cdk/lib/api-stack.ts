@@ -1024,6 +1024,7 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // --- Knowledge Base Lambda Function ---
     const lambdaKnowledgeBase = new lambda.Function(this, `${id}-lambdaKnowledgeBase`, {
+      functionName: `${id}-lambdaKnowledgeBase`,
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "main.handler",
       code: lambda.Code.fromAsset("lambda/knowledgeBase"),
