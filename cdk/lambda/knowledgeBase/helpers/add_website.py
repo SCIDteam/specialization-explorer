@@ -312,11 +312,26 @@ def _build_new_web_data_source_payload(template_data_source: dict, new_url: str,
     template_web = template_config["webConfiguration"]
     template_crawler = template_web["crawlerConfiguration"]
 
-    crawler_config = {
-        **template_crawler,
-        "inclusionFilters": include_patterns if include_patterns else template_crawler.get("inclusionFilters", []),
-        "exclusionFilters": exclude_patterns if exclude_patterns else template_crawler.get("exclusionFilters", []),
-    }
+    crawler_config = dict(template_crawler)
+
+    effective_includes = include_patterns if include_patterns else template_crawler.get("inclusionFilters")
+    effective_excludes = exclude_patterns if exclude_patterns else template_crawler.get("exclusionFilters")
+
+    if effective_includes:
+        crawler_config["inclusionFilters"] = effective_includes
+    else:
+        crawler_config.pop("inclusionFilters", None)
+
+    if effective_excludes:
+        crawler_config["exclusionFilters"] = effective_excludes
+    else:
+        crawler_config.pop("exclusionFilters", None)
+
+    user_agent_header = crawler_config.get("userAgentHeader")
+    if user_agent_header and len(user_agent_header) < 61:
+        crawler_config["userAgentHeader"] = (
+            "Mozilla/5.0 (compatible; SpecExKnowledgeBaseCrawler/1.0; +https://example.com/bot)"
+        )
 
     return {
         "name": f"web-crawler-{uuid4().hex[:8]}",
