@@ -151,6 +151,9 @@ def _prepare_conversation(
 2. If the user is just chatting (e.g. "hello", "thanks"), respond naturally.
 3. If the retrieved context does not clearly support the answer, say you do not have enough grounded information and ask a clarifying question.
 4. Do NOT invent course names, requirements, or specialization details that are not supported by the retrieved context.
+
+You MUST wrap your conversational response to the user in <answer> tags.
+After your answer, you MUST list the integer indices of the sources you actively used inside <cited_indices> tags as a JSON array (e.g., <cited_indices>[1, 3]</cited_indices>). If none, use <cited_indices>[]</cited_indices>.
 </response_instructions>
 """
 
@@ -209,7 +212,8 @@ def get_response(
     chat_session_id: str,
     user_id: Optional[str],
     db_connection,
-    save_user_message: bool = True
+    save_user_message: bool = True,
+    stream_callback=None
 ) -> Dict[str, Any]:
     
     usage_info = {}
@@ -256,37 +260,6 @@ def get_response(
             "intervention": None,
         }
 
-    tool_config = {
-        "tools": [
-            {
-                "toolSpec": {
-                    "name": "generate_cited_response",
-                    "description": "Generates the response to the user and records the exact document indices used from the <retrieved_context> block.",
-                    "inputSchema": {
-                        "json": {
-                            "type": "object",
-                            "properties": {
-                                "answer_text": {
-                                    "type": "string",
-                                    "description": "The conversational response to the user. Do not include raw citation brackets like [Doc 1] in this string."
-                                },
-                                "cited_indices": {
-                                    "type": "array",
-                                    "items": {"type": "integer"},
-                                    "description": "An array of the integer indices (e.g., [1, 3]) corresponding to the <source_X> tags that were actively used to formulate the answer. Leave empty if no documents were used."
-                                }
-                            },
-                            "required": ["answer_text", "cited_indices"]
-                        }
-                    }
-                }
-            }
-        ],
-        "toolChoice": {
-            "tool": {"name": "generate_cited_response"}
-        }
-    }
-
     request_payload = {
         "modelId": model_arn,
         "messages": bedrock_messages,
@@ -295,7 +268,6 @@ def get_response(
             "maxTokens": config.MAX_TOKENS,
             "temperature": config.TEMPERATURE
         },
-        "toolConfig": tool_config, 
         "additionalModelRequestFields": {
             "thinking": {"type": "disabled"},
             "output_config": {"effort": "low"}
@@ -304,25 +276,56 @@ def get_response(
 
     bedrock_runtime = boto3.client("bedrock-runtime", region_name=llm_region)
     
+    full_response_text = ""
     answer_text = ""
     cited_indices = []
-    
+    last_answer_len = 0
+
+    import re
     try:
-        response = bedrock_runtime.converse(**request_payload)
-        content_blocks = response["output"]["message"]["content"]
-        
-        for block in content_blocks:
-            if "toolUse" in block and block["toolUse"]["name"] == "generate_cited_response":
-                tool_input = block["toolUse"]["input"]
-                answer_text = tool_input.get("answer_text", "")
-                cited_indices = tool_input.get("cited_indices", [])
-                break
-                
-        if not answer_text:
-            for block in content_blocks:
-                if "text" in block:
-                    answer_text += block["text"]
+        response = bedrock_runtime.converse_stream(**request_payload)
+        for event in response.get("stream", []):
+            if "contentBlockDelta" in event:
+                delta = event["contentBlockDelta"]["delta"]
+                if "text" in delta:
+                    chunk = delta["text"]
+                    full_response_text += chunk
                     
+                    # Look for content after <answer>
+                    match = re.search(r'<answer>(.*)', full_response_text, re.DOTALL)
+                    if match:
+                        current_answer = match.group(1)
+                        is_closed = '</answer>' in full_response_text
+                        
+                        if is_closed:
+                            safe_answer = current_answer.split('</answer>')[0]
+                        else:
+                            # Withhold the last 10 characters to prevent accidental output of </answer> fragments
+                            safe_answer = current_answer[:-10] if len(current_answer) > 10 else ""
+                        
+                        if len(safe_answer) > last_answer_len:
+                            new_text = safe_answer[last_answer_len:]
+                            last_answer_len = len(safe_answer)
+                            if stream_callback:
+                                stream_callback(new_text)
+
+        # Parse final answer text properly
+        final_answer_match = re.search(r'<answer>(.*?)</answer>', full_response_text, re.DOTALL)
+        if final_answer_match:
+            answer_text = final_answer_match.group(1).strip()
+        else:
+            answer_text = full_response_text.strip()
+            
+        # Parse cited_indices
+        indices_match = re.search(r'<cited_indices>\s*\[(.*?)\]\s*</cited_indices>', full_response_text, re.DOTALL)
+        if indices_match:
+            indices_str = indices_match.group(1).strip()
+            if indices_str:
+                try:
+                    cited_indices = [int(x.strip()) for x in indices_str.split(',')]
+                except ValueError:
+                    pass
+
     except Exception as e:
         logger.error(f"Generation Failed: {e}")
         answer_text = "I encountered an error generating the response."
