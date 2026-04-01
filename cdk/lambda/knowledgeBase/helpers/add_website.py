@@ -653,6 +653,7 @@ def add_website(event, body, connection, kb_id):
                     ingestion_run_row_id=ingestion_run_row_id,
                     schedule_name=schedule_name
                 )
+                connection.commit()
             except Exception:
                 connection.rollback()
                 raise
@@ -738,6 +739,7 @@ def add_website(event, body, connection, kb_id):
                     ingestion_run_row_id=ingestion_run_row_id,
                     schedule_name=schedule_name
                 )
+                connection.commit()
             except Exception:
                 connection.rollback()
                 raise

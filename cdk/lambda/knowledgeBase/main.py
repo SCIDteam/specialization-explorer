@@ -5,6 +5,7 @@ import logging
 import psycopg2
 
 from helpers.add_website import add_website
+from helpers.add_csv import add_csv
 from helpers.generate_presigned_url import generate_presigned_url
 from helpers.update_status import update_status
 
@@ -148,6 +149,13 @@ def handler(event, context=None):
             or path.endswith("/admin/data_sources/website")
         ):
             return add_website(event=event, body=body, connection=connection, kb_id=kb_id)
+
+        # Route: POST /admin/data_sources/csv
+        if method == "POST" and (
+            resource == "/admin/data_sources/csv"
+            or path.endswith("/admin/data_sources/csv")
+        ):
+            return add_csv(event=event, body=body, connection=connection, kb_id=kb_id)
 
         return _response(
             404,

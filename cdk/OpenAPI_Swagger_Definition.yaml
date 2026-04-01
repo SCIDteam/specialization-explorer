@@ -389,6 +389,97 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /admin/data_sources/csv:
+    <<: *commonOptions
+    post:
+      tags: [Admin]
+      summary: Add CSV data source files
+      operationId: add_csv_data_source
+      security:
+        - adminAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - csv_file_name
+                - csv_s3_bucket
+                - csv_s3_key
+                - metadata_file_name
+                - metadata_s3_bucket
+                - metadata_s3_key
+                - created_by
+              properties:
+                csv_file_name:
+                  type: string
+                  example: alumni_data_final.csv
+                csv_s3_bucket:
+                  type: string
+                  example: my-kb-bucket
+                csv_s3_key:
+                  type: string
+                  example: uploads/alumni_data_final.csv
+                metadata_file_name:
+                  type: string
+                  example: alumni_data_final.csv.metadata.json
+                metadata_s3_bucket:
+                  type: string
+                  example: my-kb-bucket
+                metadata_s3_key:
+                  type: string
+                  example: uploads/alumni_data_final.csv.metadata.json
+                created_by:
+                  type: string
+                  example: example@email.com
+      responses:
+        "200":
+          description: CSV files accepted and ingestion started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  action:
+                    type: string
+                  csv_file_name:
+                    type: string
+                  metadata_file_name:
+                    type: string
+                  created_by:
+                    type: string
+                  data_source_id:
+                    type: string
+                  data_source_name:
+                    type: string
+                  ingestion_job_id:
+                    type: string
+                  db_csv_data_source_id:
+                    type: string
+                  db_json_data_source_id:
+                    type: string
+                  db_ingestion_run_id:
+                    type: string
+                  schedule_name:
+                    type: string
+        "400":
+          description: Invalid request
+        "404":
+          description: Route not found
+        "409":
+          description: Invalid S3 data source configuration
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
+
   /admin/system-settings:
     <<: *commonOptions
     get:
