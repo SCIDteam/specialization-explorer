@@ -71,6 +71,12 @@ type AdminDataSourcesResponse = {
   }>;
 };
 
+type PresignedUploadResponse = {
+  presignedUrl: string;
+  bucket: string;
+  key: string;
+};
+
 function formatDateTime(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -103,7 +109,35 @@ function parsePatterns(text: string): string[] {
     .split("\n")
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
-};
+}
+
+function formatSizeMb(file: File | null) {
+  if (!file) return "";
+  return `${(file.size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+function validateCsvFile(file: File): string | null {
+  const isCsv =
+    file.name.toLowerCase().endsWith(".csv") || file.type === "text/csv";
+
+  if (!isCsv) return "Only CSV files are allowed.";
+  if (file.size > 50 * 1024 * 1024) return "CSV file size must be less than 50MB.";
+  return null;
+}
+
+function validateMetadataFile(file: File): string | null {
+  const lower = file.name.toLowerCase();
+  const isJson =
+    lower.endsWith(".json") || file.type === "application/json" || file.type === "text/json";
+
+  if (!isJson) return "Only JSON metadata files are allowed.";
+  if (file.size > 50 * 1024 * 1024) return "Metadata JSON file size must be less than 50MB.";
+  return null;
+}
+
+function expectedMetadataFileName(csvFileName: string) {
+  return `${csvFileName}.metadata.json`;
+}
 
 export default function DataSourceManagement() {
   const [adminEmail, setAdminEmail] = useState<string | null>(null);
@@ -111,11 +145,14 @@ export default function DataSourceManagement() {
   const [webUrl, setWebUrl] = useState("");
   const [webUrlStatus, setWebUrlStatus] = useState<{ type: "success" | "error" | null; message: string }>({ type: null, message: "" });
   const [addingUrl, setAddingUrl] = useState(false);
+
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [file, setFile] = useState<File | null>(null);
+
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [metadataFile, setMetadataFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
     type: "success" | "error" | null;
@@ -139,7 +176,7 @@ export default function DataSourceManagement() {
 
   const PAGE_SIZE = 5;
   const [page, setPage] = useState(1);
-  
+
   const fetchAdminCredentials = async () => {
     const user = await getCurrentUser();
     const email = user?.signInDetails?.loginId ?? null;
@@ -191,10 +228,10 @@ export default function DataSourceManagement() {
       const res = await fetch(
         `${import.meta.env.VITE_API_ENDPOINT}/admin/data_sources`,
         {
-          headers: {
-            Authorization: token,
-            "Content-Type": "application/json",
-          },
+        headers: {
+          Authorization: token,
+          "Content-Type": "application/json",
+        },
         }
       );
 
@@ -227,8 +264,7 @@ export default function DataSourceManagement() {
   useEffect(() => {
     setPage(1);
   }, [searchQuery]);
-  
-  // when a fresh fetch changes the number of rows, keep page in range
+
   useEffect(() => {
     setPage(1);
   }, [dataSources.length]);
@@ -301,35 +337,97 @@ export default function DataSourceManagement() {
     }
   };
 
-  const handleFileSelect = (selectedFile: File) => {
+  const handleCsvFileSelect = (selectedFile: File) => {
     setUploadStatus({ type: null, message: "" });
-
-    // Validate file type
-    if (
-      !selectedFile.name.endsWith(".csv") &&
-      selectedFile.type !== "text/csv"
-    ) {
-      setUploadStatus({
-        type: "error",
-        message: "Only CSV files are allowed.",
-      });
+    const validationError = validateCsvFile(selectedFile);
+    if (validationError) {
+      setUploadStatus({ type: "error", message: validationError });
       return;
     }
+    setCsvFile(selectedFile);
+  };
 
-    // Validate file size (50MB)
-    if (selectedFile.size > 50 * 1024 * 1024) {
-      setUploadStatus({
-        type: "error",
-        message: "File size must be less than 50MB.",
-      });
+  const handleMetadataFileSelect = (selectedFile: File) => {
+    setUploadStatus({ type: null, message: "" });
+    const validationError = validateMetadataFile(selectedFile);
+    if (validationError) {
+      setUploadStatus({ type: "error", message: validationError });
       return;
     }
+    setMetadataFile(selectedFile);
+  };
 
-    setFile(selectedFile);
+  const getPresignedUpload = async (
+    token: string,
+    file: File,
+    uploadType: "csv" | "json"
+  ): Promise<PresignedUploadResponse> => {
+    const res = await fetch(
+      `${import.meta.env.VITE_API_ENDPOINT}/admin/generate-presigned-url?file_name=${encodeURIComponent(
+        file.name
+      )}&content_type=${encodeURIComponent(
+        file.type || (uploadType === "csv" ? "text/csv" : "application/json")
+      )}`,
+      {
+        headers: {
+          Authorization: token,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error(`Failed to generate upload URL for ${file.name}`);
+    }
+
+    return (await res.json()) as PresignedUploadResponse;
+  };
+
+  const uploadFileToS3 = async (presignedUrl: string, file: File, fallbackContentType: string) => {
+    const uploadResponse = await fetch(presignedUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || fallbackContentType,
+      },
+      body: file,
+    });
+
+    if (!uploadResponse.ok) {
+      throw new Error(`Failed to upload ${file.name} to S3`);
+    }
+  };
+
+  const resetUploadDialog = () => {
+    setIsUploadOpen(false);
+    setCsvFile(null);
+    setMetadataFile(null);
+    setUploadStatus({ type: null, message: "" });
   };
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!csvFile || !metadataFile) {
+      setUploadStatus({
+        type: "error",
+        message: "Please select both the CSV file and the metadata JSON file.",
+      });
+      return;
+    }
+
+    if (!adminEmail) {
+      setUploadStatus({
+        type: "error",
+        message: "Unable to determine the current admin email.",
+      });
+      return;
+    }
+
+    const expectedMetadata = expectedMetadataFileName(csvFile.name);
+    if (metadataFile.name !== expectedMetadata) {
+      setUploadStatus({
+        type: "error",
+        message: `Metadata file name must be exactly ${expectedMetadata}`,
+      });
+      return;
+    }
 
     try {
       setUploading(true);
@@ -338,52 +436,54 @@ export default function DataSourceManagement() {
       const session = await AuthService.getAuthSession(true);
       const token = session.tokens.idToken;
 
-      // 1. Get pre-signed URL for upload
-      const presignedResponse = await fetch(
-        `${
-          import.meta.env.VITE_API_ENDPOINT
-        }/generate-presigned-url?file_name=${encodeURIComponent(
-          file.name
-        )}&content_type=${encodeURIComponent(
-          file.type || "text/csv"
-        )}&upload_type=TODO:update`,
+      const csvUpload = await getPresignedUpload(token, csvFile, "csv");
+      await uploadFileToS3(csvUpload.presignedUrl, csvFile, "text/csv");
+
+      const metadataUpload = await getPresignedUpload(token, metadataFile, "json");
+      await uploadFileToS3(metadataUpload.presignedUrl, metadataFile, "application/json");
+
+      const ingestResponse = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/data_sources/csv`,
         {
+          method: "POST",
           headers: {
             Authorization: token,
+            "Content-Type": "application/json",
           },
+          body: JSON.stringify({
+            csv_file_name: csvFile.name,
+            csv_s3_bucket: csvUpload.bucket,
+            csv_s3_key: csvUpload.key,
+            metadata_file_name: metadataFile.name,
+            metadata_s3_bucket: metadataUpload.bucket,
+            metadata_s3_key: metadataUpload.key,
+            created_by: adminEmail,
+          }),
         }
       );
 
-      if (!presignedResponse.ok) {
-        throw new Error("Failed to generate upload URL");
-      }
+      const responseJson = await ingestResponse.json().catch(() => ({}));
 
-      const { presignedUrl } = await presignedResponse.json();
-
-      // 2. Upload file to S3
-      const uploadResponse = await fetch(presignedUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "text/csv",
-        },
-        body: file,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error("Failed to upload file to S3");
+      if (!ingestResponse.ok) {
+        throw new Error(
+          responseJson?.error ||
+            responseJson?.message ||
+            "Upload succeeded but ingestion could not be started."
+        );
       }
 
       setUploadStatus({
         type: "success",
-        message: "File uploaded successfully. Processing started.",
+        message:
+          responseJson?.message ||
+          "CSV and metadata uploaded successfully. Processing started.",
       });
 
-      // Close dialog after a short delay
+      await fetchAdminDataSources();
+
       setTimeout(() => {
-        setIsUploadOpen(false);
-        setFile(null);
-        setUploadStatus({ type: null, message: "" });
-      }, 2000);
+        resetUploadDialog();
+      }, 1200);
     } catch (err) {
       console.error("Upload error:", err);
       setUploadStatus({
@@ -484,7 +584,7 @@ export default function DataSourceManagement() {
           <h3 className="text-xl font-semibold text-gray-900">
             Data Sources
           </h3>
-          <div className="flex gap-2">    
+          <div className="flex gap-2">
             {/* Add Web URL Button and Dialog */}
             <Dialog open={isUrlDialogOpen} onOpenChange={setIsUrlDialogOpen}>
               <DialogTrigger asChild>
@@ -577,6 +677,7 @@ export default function DataSourceManagement() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
             <Dialog open={isUploadOpen} onOpenChange={setIsUploadOpen}>
               <DialogTrigger asChild>
                 <Button className="bg-secondary text-white">
@@ -584,7 +685,7 @@ export default function DataSourceManagement() {
                   Add Alumni Data (CSV)
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-md">
+              <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                   <DialogTitle>Upload Alumni Data</DialogTitle>
                   <DialogDescription>
@@ -592,76 +693,140 @@ export default function DataSourceManagement() {
                     <span className="font-medium">metadata JSON</span>. Max size 50MB each.
                   </DialogDescription>
                 </DialogHeader>
+
                 <div className="grid gap-4 py-4">
-                  {!file ? (
-                    <div
-                      className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer"
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        const droppedFile = e.dataTransfer.files[0];
-                        if (droppedFile) handleFileSelect(droppedFile);
-                      }}
-                      onClick={() =>
-                        document.getElementById("csv-upload")?.click()
-                      }
-                    >
-                      <div className="flex flex-col items-center gap-2">
-                        <Upload className="h-10 w-10 text-gray-400" />
-                        <span className="text-sm font-medium text-gray-600">
-                          Drag and drop your CSV here
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          or click to browse
-                        </span>
-                      </div>
-                      <Input
-                        id="csv-upload"
-                        type="file"
-                        className="hidden"
-                        accept=".csv"
-                        onChange={(e) => {
-                          const selectedFile = e.target.files?.[0];
-                          if (selectedFile) handleFileSelect(selectedFile);
-                        }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="border rounded-lg p-4 bg-gray-50">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 overflow-hidden">
-                          <FileText className="h-5 w-5 text-[#2c5f7c] flex-shrink-0" />
-                          <span className="text-sm font-medium truncate">
-                            {file.name}
-                          </span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 text-gray-500 hover:text-red-600"
-                          onClick={() => {
-                            setFile(null);
-                            setUploadStatus({ type: null, message: "" });
-                          }}
-                          disabled={uploading}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <div className="text-xs text-gray-500 mb-2">
-                        {(file.size / (1024 * 1024)).toFixed(2)} MB
-                      </div>
-                      {uploadStatus.message && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-gray-900">CSV file</div>
+
+                      {!csvFile ? (
                         <div
-                          className={`text-sm p-2 rounded ${
-                            uploadStatus.type === "success"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-red-100 text-red-700"
-                          }`}
+                          className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const droppedFile = e.dataTransfer.files?.[0];
+                            if (droppedFile) handleCsvFileSelect(droppedFile);
+                          }}
+                          onClick={() => document.getElementById("csv-upload")?.click()}
                         >
-                          {uploadStatus.message}
+                          <div className="flex flex-col items-center gap-2">
+                            <Upload className="h-8 w-8 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-600">
+                              Drag and drop CSV
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              or click to browse
+                            </span>
+                          </div>
+                          <Input
+                            id="csv-upload"
+                            type="file"
+                            className="hidden"
+                            accept=".csv,text/csv"
+                            onChange={(e) => {
+                              const selectedFile = e.target.files?.[0];
+                              if (selectedFile) handleCsvFileSelect(selectedFile);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="border rounded-lg p-4 bg-gray-50">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <FileText className="h-5 w-5 text-[#2c5f7c] flex-shrink-0" />
+                              <span className="text-sm font-medium truncate">{csvFile.name}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-gray-500 hover:text-red-600"
+                              onClick={() => setCsvFile(null)}
+                              disabled={uploading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="text-xs text-gray-500">{formatSizeMb(csvFile)}</div>
                         </div>
                       )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <div className="text-sm font-medium text-gray-900">Metadata JSON file</div>
+
+                      {!metadataFile ? (
+                        <div
+                          className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-gray-50 transition-colors cursor-pointer"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const droppedFile = e.dataTransfer.files?.[0];
+                            if (droppedFile) handleMetadataFileSelect(droppedFile);
+                          }}
+                          onClick={() => document.getElementById("metadata-upload")?.click()}
+                        >
+                          <div className="flex flex-col items-center gap-2">
+                            <Upload className="h-8 w-8 text-gray-400" />
+                            <span className="text-sm font-medium text-gray-600">
+                              Drag and drop metadata JSON
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              or click to browse
+                            </span>
+                          </div>
+                          <Input
+                            id="metadata-upload"
+                            type="file"
+                            className="hidden"
+                            accept=".json,application/json,text/json"
+                            onChange={(e) => {
+                              const selectedFile = e.target.files?.[0];
+                              if (selectedFile) handleMetadataFileSelect(selectedFile);
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="border rounded-lg p-4 bg-gray-50">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2 overflow-hidden">
+                              <FileText className="h-5 w-5 text-[#2c5f7c] flex-shrink-0" />
+                              <span className="text-sm font-medium truncate">{metadataFile.name}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-gray-500 hover:text-red-600"
+                              onClick={() => setMetadataFile(null)}
+                              disabled={uploading}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="text-xs text-gray-500">{formatSizeMb(metadataFile)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {csvFile && (
+                    <div className="text-xs text-gray-600">
+                      Expected metadata filename:{" "}
+                      <code className="bg-gray-100 px-1 py-0.5 rounded">
+                        {expectedMetadataFileName(csvFile.name)}
+                      </code>
+                    </div>
+                  )}
+
+                  {uploadStatus.message && (
+                    <div
+                      className={`text-sm p-2 rounded ${
+                        uploadStatus.type === "success"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {uploadStatus.message}
                     </div>
                   )}
 
@@ -672,12 +837,12 @@ export default function DataSourceManagement() {
                         <div className="text-amber-800">
                           <div className="font-semibold">Two files are required</div>
                           <div className="mt-1 text-amber-700">
-                            1) The <span className="font-medium">CSV</span> file (alumni records){" "}
+                            1) The <span className="font-medium">CSV</span> file
                             <br />
                             2) A matching <span className="font-medium">metadata JSON</span> file
-                            (same base name), e.g.{" "}
+                            with the exact name{" "}
                             <code className="bg-white/70 px-1 py-0.5 rounded border border-amber-200">
-                              alumni_data_final.csv.metadata.json
+                              {"<csv-file-name>.metadata.json"}
                             </code>
                           </div>
                         </div>
@@ -699,14 +864,11 @@ export default function DataSourceManagement() {
                     </div>
                   </div>
                 </div>
+
                 <DialogFooter>
                   <Button
                     variant="outline"
-                    onClick={() => {
-                      setIsUploadOpen(false);
-                      setFile(null);
-                      setUploadStatus({ type: null, message: "" });
-                    }}
+                    onClick={resetUploadDialog}
                     disabled={uploading}
                   >
                     Cancel
@@ -714,7 +876,7 @@ export default function DataSourceManagement() {
                   <Button
                     className="bg-[#2c5f7c] hover:bg-[#234d63]"
                     onClick={handleUpload}
-                    disabled={!file || uploading}
+                    disabled={!csvFile || !metadataFile || uploading}
                   >
                     {uploading ? (
                       <>
@@ -903,46 +1065,37 @@ export default function DataSourceManagement() {
 
                                         {json ? (
                                           <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                                            <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                                              {/* Row aligned to the main table columns */}
-                                              <div className="grid grid-cols-12 gap-2 px-3 py-3 text-sm items-start">
-                                                {/* Name (45%) -> col-span-6 is close; we’ll use 6/12 */}
-                                                <div className="col-span-6 min-w-0">
-                                                  <div className="text-gray-900 break-all font-medium">
-                                                    {json.name}
-                                                  </div>
+                                            <div className="grid grid-cols-12 gap-2 px-3 py-3 text-sm items-start">
+                                              <div className="col-span-6 min-w-0">
+                                                <div className="text-gray-900 break-all font-medium">
+                                                  {json.name}
                                                 </div>
+                                              </div>
 
-                                                {/* Type (10%) -> col-span-1 */}
-                                                <div className="col-span-1">
-                                                  <Badge variant="secondary">{typeLabel(json.type)}</Badge>
-                                                </div>
+                                              <div className="col-span-1">
+                                                <Badge variant="secondary">{typeLabel(json.type)}</Badge>
+                                              </div>
 
-                                                {/* Status (12%) -> col-span-1 */}
-                                                <div className="col-span-1">{statusBadge(jsonStatus)}</div>
+                                              <div className="col-span-1">{statusBadge(jsonStatus)}</div>
 
-                                                {/* Uploaded (16%) -> col-span-2 */}
-                                                <div className="col-span-2 text-xs text-gray-700">
-                                                  {formatDateTime(json.created_at)}
-                                                </div>
+                                              <div className="col-span-2 text-xs text-gray-700">
+                                                {formatDateTime(json.created_at)}
+                                              </div>
 
-                                                {/* Ingested (16%) -> col-span-1 or 2; we’ll do col-span-1 and keep Delete at 1 */}
-                                                <div className="col-span-1 text-xs text-gray-700">
-                                                  {formatDateTime(jsonRun?.completed_at ?? null)}
-                                                </div>
+                                              <div className="col-span-1 text-xs text-gray-700">
+                                                {formatDateTime(jsonRun?.completed_at ?? null)}
+                                              </div>
 
-                                                {/* Delete (8%) -> col-span-1 */}
-                                                <div className="col-span-1 flex justify-end">
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 text-red-500"
-                                                    disabled
-                                                    title="Delete (mock)"
-                                                  >
-                                                    <Trash2 className="h-4 w-4" />
-                                                  </Button>
-                                                </div>
+                                              <div className="col-span-1 flex justify-end">
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-red-500"
+                                                  disabled
+                                                  title="Delete (mock)"
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
                                               </div>
                                             </div>
                                           </div>
@@ -973,15 +1126,9 @@ export default function DataSourceManagement() {
           {!loading && filteredDataSources.length > 0 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200">
               <div className="text-sm text-gray-600">
-                Showing{" "}
-                <span className="font-medium">
-                  {Math.min(startIdx + 1, filteredDataSources.length)}
-                </span>{" "}
-                to{" "}
-                <span className="font-medium">
-                  {Math.min(startIdx + PAGE_SIZE, filteredDataSources.length)}
-                </span>{" "}
-                of <span className="font-medium">{filteredDataSources.length}</span>
+                Showing <span className="font-medium">{Math.min(startIdx + 1, filteredDataSources.length)}</span> to{" "}
+                <span className="font-medium">{Math.min(startIdx + PAGE_SIZE, filteredDataSources.length)}</span> of{" "}
+                <span className="font-medium">{filteredDataSources.length}</span>
               </div>
 
               <div className="flex items-center gap-2">
