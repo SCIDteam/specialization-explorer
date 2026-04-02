@@ -80,6 +80,13 @@ const handleError = (error, response) => {
 exports.handler = async (event) => {
   const response = createResponse();
 
+  const callerRole = event.requestContext?.authorizer?.role;
+  if (callerRole !== 'admin') {
+    response.statusCode = 403;
+    response.body = JSON.stringify({ error: 'Admin access required' });
+    return response;
+  }
+
   // Ensure database connection is ready
   await initConnection();
   await initConnection();
