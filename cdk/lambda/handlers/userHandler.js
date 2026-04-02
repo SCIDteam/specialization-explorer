@@ -391,6 +391,13 @@ exports.handler = async (event) => {
           break;
         }
 
+        const authenticatedUserId = event?.requestContext?.authorizer?.userId;
+        if (!authenticatedUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
         // Validate user session by primary key
         const userSessionCreate = await sqlConnection`
           SELECT id FROM user_sessions WHERE id = ${createAnalyticsSessionId}
@@ -413,9 +420,9 @@ exports.handler = async (event) => {
         }
 
         const newAnalytics = await sqlConnection`
-          INSERT INTO analytics_events (user_session_id, event_type, properties)
-          VALUES (${userSessionCreateId}, ${event_type}, ${properties || {}})
-          RETURNING id, user_session_id, event_type, properties, created_at
+          INSERT INTO analytics_events (user_id, chat_session_id, event_type, properties)
+          VALUES (${authenticatedUserId}, ${userSessionCreateId}, ${event_type}, ${properties || {}})
+          RETURNING id, user_id, chat_session_id, event_type, properties, created_at
         `;
 
         response.statusCode = 201;
@@ -423,69 +430,125 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
 
-      case "GET /analytics/{analytics_id}":
+      case "GET /analytics/{analytics_id}": {
+        const authenticatedAnalyticsUserId = event?.requestContext?.authorizer?.userId;
         const analyticsId = event.pathParameters?.analytics_id;
+
         if (!analyticsId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Analytics ID is required" });
           break;
         }
 
+        if (!authenticatedAnalyticsUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
         const analyticsEvent = await sqlConnection`
-          SELECT id, user_session_id, event_type, properties, created_at
+          SELECT id, user_id, chat_session_id, event_type, properties, created_at
           FROM analytics_events
           WHERE id = ${analyticsId}
         `;
 
         if (analyticsEvent.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsEvent[0].user_id !== authenticatedAnalyticsUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
           break;
         }
 
         data = analyticsEvent[0];
         response.body = JSON.stringify(data);
         break;
+      }
 
-      case "PUT /analytics/{analytics_id}":
+      case "PUT /analytics/{analytics_id}": {
+        const authenticatedUpdateUserId = event?.requestContext?.authorizer?.userId;
         const updateAnalyticsId = event.pathParameters?.analytics_id;
+
         if (!updateAnalyticsId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Analytics ID is required" });
           break;
         }
 
-        const updateAnalyticsData = parseBody(event.body);
-        const { event_type: updateEventType, properties: updateProperties } =
-          updateAnalyticsData;
-
-        const updatedAnalytics = await sqlConnection`
-          UPDATE analytics_events 
-          SET event_type = ${updateEventType}, properties = ${updateProperties || {}
-          }
-          WHERE id = ${updateAnalyticsId}
-          RETURNING id, user_session_id, event_type, properties, created_at
-        `;
-
-        if (updatedAnalytics.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
+        if (!authenticatedUpdateUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
           break;
         }
+
+        const analyticsToUpdate = await sqlConnection`
+          SELECT id, user_id
+          FROM analytics_events
+          WHERE id = ${updateAnalyticsId}
+        `;
+
+        if (analyticsToUpdate.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsToUpdate[0].user_id !== authenticatedUpdateUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
+          break;
+        }
+
+        const updateAnalyticsData = parseBody(event.body);
+        const { event_type: updateEventType, properties: updateProperties } = updateAnalyticsData;
+
+        const updatedAnalytics = await sqlConnection`
+          UPDATE analytics_events
+          SET event_type = ${updateEventType}, properties = ${updateProperties || {}}
+          WHERE id = ${updateAnalyticsId}
+          RETURNING id, user_id, chat_session_id, event_type, properties, created_at
+        `;
 
         data = updatedAnalytics[0];
         response.body = JSON.stringify(data);
         break;
+      }
 
-      case "DELETE /analytics/{analytics_id}":
+      case "DELETE /analytics/{analytics_id}": {
+        const authenticatedDeleteUserId = event?.requestContext?.authorizer?.userId;
         const deleteAnalyticsId = event.pathParameters?.analytics_id;
+
         if (!deleteAnalyticsId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Analytics ID is required" });
+          break;
+        }
+
+        if (!authenticatedDeleteUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
+        const analyticsToDelete = await sqlConnection`
+          SELECT id, user_id
+          FROM analytics_events
+          WHERE id = ${deleteAnalyticsId}
+        `;
+
+        if (analyticsToDelete.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsToDelete[0].user_id !== authenticatedDeleteUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
           break;
         }
 
@@ -495,18 +558,41 @@ exports.handler = async (event) => {
 
         if (deletedAnalytics.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
+          response.body = JSON.stringify({ error: "Analytics event not found" });
           break;
         }
 
         response.statusCode = 204;
         response.body = "";
         break;
+      }
 
       // GET /public/config/userGuidelines - Public endpoint to fetch user guidelines
       case "GET /public/config/userGuidelines":
+
+        if (!authenticatedDeleteUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
+        const analyticsToDelete = await sqlConnection`
+          SELECT id, user_id
+          FROM analytics_events
+          WHERE id = ${deleteAnalyticsId}
+        `;
+
+        if (analyticsToDelete.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsToDelete[0].user_id !== authenticatedDeleteUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
+          break;
+        }
         try {
           const guidelinesResult = await sqlConnection`
             SELECT value FROM system_settings WHERE key = 'user_guidelines'
