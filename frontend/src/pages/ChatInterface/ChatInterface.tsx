@@ -8,6 +8,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import type { Message } from "@/types/Chat";
 import { useUser } from "@/providers/user";
 
+
 const WELCOME_PROMPT = `Hello! Please act as the Specialization Explorer.
 1. Introduce yourself briefly.
 2. Ask the student these 1 of these starter questions, and use some variation of these in the later responses to complete the checklist:
@@ -17,6 +18,7 @@ const WELCOME_PROMPT = `Hello! Please act as the Specialization Explorer.
 3. Be friendly and inviting.`;
 
 export default function AIChatPage() {
+  const { setCurrentMessages, setActiveChatName } = useView();
 
 
   // State
@@ -29,6 +31,7 @@ export default function AIChatPage() {
 
   const {
     activeChatSessionId,
+    chatSessions,
     updateChatSessionName,
   } = useView();
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -51,6 +54,34 @@ export default function AIChatPage() {
 
   const { userId } = useUser();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const activeChatNameDisplay = useMemo(() => {
+    if (!activeChatSessionId) {
+      return null;
+    }
+
+    const activeIndex = chatSessions.findIndex(
+      (session) => session.id === activeChatSessionId
+    );
+
+    if (activeIndex === -1) {
+      return null;
+    }
+
+    const activeSession = chatSessions[activeIndex];
+    if (activeSession.name?.trim()) {
+      return activeSession.name;
+    }
+
+    // Match the same fallback label shown in the sidebar.
+    return `Chat ${chatSessions.length - activeIndex}`;
+  }, [activeChatSessionId, chatSessions]);
+
+  // Update context with current messages and chat name
+  useEffect(() => {
+    setCurrentMessages(messages);
+    setActiveChatName(activeChatNameDisplay);
+  }, [messages, activeChatNameDisplay, setCurrentMessages, setActiveChatName]);
 
   // Auto-scroll to bottom when messages change or when typing starts
   const scrollToBottom = useCallback(() => {
@@ -706,7 +737,7 @@ export default function AIChatPage() {
         </div>
       ) : (
         // Scrollable messages area (Full width for edge scrollbar)
-        <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-invisible w-full">
+        <div className="flex-1 overflow-y-auto overscroll-contain chat-scrollbar w-full">
           <div className="w-full max-w-2xl 2xl:max-w-3xl mx-auto flex flex-col gap-4 pt-4 pb-2 px-4">
             {isLoadingHistory ? (
               <div className="flex items-center justify-center py-8">
@@ -725,21 +756,25 @@ export default function AIChatPage() {
 
       {/* Statically bolted input area at the bottom */}
       <div className="shrink-0 w-full border-t border-border/100 bg-background pt-6 pb-6 md:pb-5">
-        <div className="w-full max-w-2xl 2xl:max-w-3xl mx-auto px-4">
-          <div className="relative mb-2">
-            <AiChatInput
-              value={message}
-              onChange={(val: string) => setMessage(val)}
-              placeholder={
-                isTokenLimitReached
-                  ? `Daily limit reached. Resets at ${tokenResetTime || "soon"}`
-                  : isStreaming
-                  ? "Specialization Explorer is thinking..."
-                  : "Message Specialization Explorer..."
-              }
-              onSend={sendMessage}
-              disabled={isTokenLimitReached || isStreaming}
-            />
+        <div className="w-full px-4">
+          <div className="mb-2 flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="w-full max-w-2xl 2xl:max-w-3xl mx-auto">
+                <AiChatInput
+                  value={message}
+                  onChange={(val: string) => setMessage(val)}
+                  placeholder={
+                    isTokenLimitReached
+                      ? `Daily limit reached. Resets at ${tokenResetTime || "soon"}`
+                      : isStreaming
+                      ? "Specialization Explorer is thinking..."
+                      : "Message Specialization Explorer..."
+                  }
+                  onSend={sendMessage}
+                  disabled={isTokenLimitReached || isStreaming}
+                />
+              </div>
+            </div>
           </div>
 
           <div className="text-center">

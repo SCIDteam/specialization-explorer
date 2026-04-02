@@ -70,6 +70,35 @@ def handler(event, context=None):
         # Load dynamic configuration from DB
         config.load_config(conn)
         
+        request_context = event.get('requestContext', {})
+        connection_id = request_context.get('connectionId')
+        apigw_management = None
+        
+        if connection_id:
+            domain_name = request_context.get('domainName')
+            stage = request_context.get('stage')
+            if domain_name and stage:
+                endpoint_url = f"https://{domain_name}/{stage}"
+                try:
+                    apigw_management = boto3.client('apigatewaymanagementapi', endpoint_url=endpoint_url)
+                    # Send start message
+                    apigw_management.post_to_connection(
+                        ConnectionId=connection_id,
+                        Data=json.dumps({'type': 'start'})
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to initialize WebSocket client: {e}")
+
+        def stream_chunk(chunk_text):
+            if apigw_management and connection_id:
+                try:
+                    apigw_management.post_to_connection(
+                        ConnectionId=connection_id,
+                        Data=json.dumps({'type': 'chunk', 'content': chunk_text})
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send stream chunk: {e}")
+
         response_data = get_response(
             query=query,
             knowledge_base_id=config.KB_ID,
@@ -78,7 +107,8 @@ def handler(event, context=None):
             llm_region=config.LLM_REGION,
             chat_session_id=chat_session_id,
             user_id=user_id,
-            db_connection=conn
+            db_connection=conn,
+            stream_callback=stream_chunk
         )
         
         # Format response to match API contract
@@ -97,56 +127,38 @@ def handler(event, context=None):
             response_body["error"] = "TOKEN_LIMIT_EXCEEDED"
             response_body["message"] = response_body["response"]
             
-        # Send WebSocket response if connection_id is present
-        request_context = event.get('requestContext', {})
-        connection_id = request_context.get('connectionId')
-        if connection_id:
-            domain_name = request_context.get('domainName')
-            stage = request_context.get('stage')
-            if domain_name and stage:
-                endpoint_url = f"https://{domain_name}/{stage}"
-                try:
-                    apigw_management = boto3.client('apigatewaymanagementapi', endpoint_url=endpoint_url)
-                    
-                    if status_code == 429:
-                        # Send specific error over WS for token limits
-                        error_msg = {
-                            'type': 'error',
-                            'error': 'TOKEN_LIMIT_EXCEEDED',
-                            'message': response_body['message'],
-                            'token_usage': response_body.get('token_usage', {})
-                        }
-                        apigw_management.post_to_connection(
-                            ConnectionId=connection_id,
-                            Data=json.dumps(error_msg)
-                        )
-                        logger.info(f"Sent WebSocket token limit error to {connection_id}")
-                    else:
-                        # 1. Send text chunk
-                        chunk_msg = {
-                            'type': 'chunk',
-                            'content': response_body['response']
-                        }
-                        apigw_management.post_to_connection(
-                            ConnectionId=connection_id,
-                            Data=json.dumps(chunk_msg)
-                        )
-                        
-                        # 2. Send complete message with sources
-                        complete_msg = {
-                            'type': 'complete',
-                            'sources': response_body['sources'],
-                            'warning': response_body.get('warning'),
-                            'chat_session_id': response_body['chat_session_id'],
-                            'token_usage': response_body.get('token_usage', {})
-                        }
-                        apigw_management.post_to_connection(
-                            ConnectionId=connection_id,
-                            Data=json.dumps(complete_msg)
-                        )
-                        logger.info(f"Sent WebSocket responses (chunk+complete) to {connection_id}")
-                except Exception as e:
-                    logger.error(f"Failed to post to WebSocket connection: {e}")
+        # Send WebSocket complete message
+        if apigw_management and connection_id:
+            try:
+                if status_code == 429:
+                    # Send specific error over WS for token limits
+                    error_msg = {
+                        'type': 'error',
+                        'error': 'TOKEN_LIMIT_EXCEEDED',
+                        'message': response_body['message'],
+                        'token_usage': response_body.get('token_usage', {})
+                    }
+                    apigw_management.post_to_connection(
+                        ConnectionId=connection_id,
+                        Data=json.dumps(error_msg)
+                    )
+                    logger.info(f"Sent WebSocket token limit error to {connection_id}")
+                else:
+                    # Send complete message with sources
+                    complete_msg = {
+                        'type': 'complete',
+                        'sources': response_body['sources'],
+                        'warning': response_body.get('warning'),
+                        'chat_session_id': response_body['chat_session_id'],
+                        'token_usage': response_body.get('token_usage', {})
+                    }
+                    apigw_management.post_to_connection(
+                        ConnectionId=connection_id,
+                        Data=json.dumps(complete_msg)
+                    )
+                    logger.info(f"Sent WebSocket response (complete) to {connection_id}")
+            except Exception as e:
+                logger.error(f"Failed to post to WebSocket connection: {e}")
 
         return {
             'statusCode': status_code,
