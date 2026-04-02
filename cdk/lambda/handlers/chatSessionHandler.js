@@ -196,7 +196,7 @@ exports.handler = async (event) => {
 
       case "GET /chat_sessions/{chat_session_id}/chat_history": {
         const chatSessionId = event.pathParameters?.chat_session_id;
-        const requestingUserId = event.queryStringParameters?.user_id;
+        const authenticatedUserId = event?.requestContext?.authorizer?.userId
 
         if (!chatSessionId) {
           response.statusCode = 400;
@@ -204,9 +204,9 @@ exports.handler = async (event) => {
           break;
         }
 
-        if (!requestingUserId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_id query parameter is required" });
+        if (!authenticatedUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
           break;
         }
 
@@ -224,7 +224,7 @@ exports.handler = async (event) => {
 
         // Ownership validation (mandatory)
         const ownerId = chatSessionResult[0].user_id;
-        if (ownerId !== requestingUserId) {
+        if (ownerId !== authenticatedUserId) {
           response.statusCode = 403;
           response.body = JSON.stringify({
             error: "Access denied",
