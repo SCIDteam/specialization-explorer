@@ -127,11 +127,6 @@ export default function AIChatPage() {
       console.warn("[WebSocket] Base URL not configured");
       return;
     }
-
-    console.log("[WebSocket] Preparing connection", {
-      url: baseWebSocketUrl,
-      tokenAttached: Boolean(webSocketToken),
-    });
   }, [baseWebSocketUrl, webSocketToken]);
 
   useEffect(() => {
@@ -302,24 +297,15 @@ export default function AIChatPage() {
   } = useWebSocket(webSocketUrl, {
     onMessage: handleWebSocketMessage,
     onConnect: () => {
-      console.log("[WebSocket] Connected", {
-        url: baseWebSocketUrl,
-        tokenAttached: Boolean(webSocketToken),
-      });
+      console.log("[WebSocket] Connected");
       console.log("Streaming: ", isStreaming);
     },
     onDisconnect: () => {
-      console.log("[WebSocket] Disconnected", {
-        url: baseWebSocketUrl,
-        tokenAttached: Boolean(webSocketToken),
-      });
+      console.log("[WebSocket] Disconnected");
       console.log("Streaming: ", isStreaming);
     },
     onError: (error) => {
-      console.error("[WebSocket] Error:", error, {
-        url: baseWebSocketUrl,
-        tokenAttached: Boolean(webSocketToken),
-      });
+      console.error("[WebSocket] Error:", error);
       console.log("Streaming: ", isStreaming);
     },
   });
@@ -579,12 +565,7 @@ export default function AIChatPage() {
 
     // Try WebSocket streaming first, fallback to HTTP if not connected
     if (isConnected && webSocketUrl) {
-      console.log("[WebSocket] Sending message via WebSocket:", {
-        action: "generate_text",
-        query: text,
-        chat_session_id: activeChatSessionId,
-        user_id: userId,
-      });
+      
       const success = sendWebSocketMessage({
         action: "generate_text",
         query: text,
@@ -655,7 +636,6 @@ export default function AIChatPage() {
       }
 
       const data = await response.json();
-      console.log("Data: ", data);
 
       if (data.token_usage?.remaining === 0) {
         setIsTokenLimitReached(true);

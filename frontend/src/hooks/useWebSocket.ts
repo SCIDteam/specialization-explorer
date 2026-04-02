@@ -96,11 +96,6 @@ export const useWebSocket = (
       return;
     }
 
-    console.log(
-      `[WebSocket] Connecting to: ${url} (attempt ${
-        reconnectAttemptsRef.current + 1
-      })`
-    );
     setConnectionState("connecting");
 
     try {
