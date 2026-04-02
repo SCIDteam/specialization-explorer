@@ -69,6 +69,7 @@ exports.handler = async (event) => {
     });
     responseStruct["context"] = {
       userId: payload.sub,
+      email: payload.email,
     };
 
     return responseStruct;
