@@ -105,6 +105,7 @@ export class ApiGatewayStack extends cdk.Stack {
     const userPoolName = `${id}-UserPool`;
     this.userPool = new cognito.UserPool(this, `${id}-pool`, {
       userPoolName: userPoolName,
+      advancedSecurityMode: cognito.AdvancedSecurityMode.ENFORCED,
       signInAliases: {
         email: true,
       },
@@ -296,12 +297,12 @@ export class ApiGatewayStack extends cdk.Stack {
         loggingLevel: apigateway.MethodLoggingLevel.INFO,
         dataTraceEnabled: true,
         metricsEnabled: true,
-        /*
+        
         accessLogDestination: new apigateway.LogGroupLogDestination(
           accessLogGroup
         ),
-        */
-        /*
+        
+        
         accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields({
           caller: true,
           httpMethod: true,
@@ -313,14 +314,13 @@ export class ApiGatewayStack extends cdk.Stack {
           status: true,
           user: true,
         }),
-        */
+        
         methodOptions: {
           // Default for all endpoints
           "/*/*": {
             throttlingRateLimit: 100,
             throttlingBurstLimit: 200,
           },
-
 
           // FREQUENT: Public token endpoint
           "/user/publicToken/GET": {
