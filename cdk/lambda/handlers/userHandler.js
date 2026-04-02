@@ -80,13 +80,7 @@ exports.handler = async (event) => {
         const body = parseBody(event.body);
 
         // Default role is student
-        const role = body.role || "student";
-        if (!["student", "admin"].includes(role)) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Invalid role" });
-          break;
-        }
-
+        const role = "student";
         const userId = crypto.randomUUID();
         const email = body.email || null;
         const displayName = body.display_name || body.displayName || null;
