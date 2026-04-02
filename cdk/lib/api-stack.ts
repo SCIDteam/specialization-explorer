@@ -586,15 +586,18 @@ export class ApiGatewayStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
     });
 
+
+    // Grant access to specific secrets instead of '*'
+    db.secretPathUser.grantRead(lambdaRole);
+    this.secret.grantRead(lambdaRole);
+
+    // Explicitly grant access to the KnowledgeBase ID secret without using a broad wildcard
     lambdaRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: [
-          //Secrets Manager
-          "secretsmanager:GetSecretValue",
-        ],
+        actions: ["secretsmanager:GetSecretValue"],
         resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:SpecEx/KnowledgeBase/Id-*`,
         ],
       })
     );
@@ -674,19 +677,8 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Grant access to Secret Manager
-    coglambdaRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          //Secrets Manager
-          "secretsmanager:GetSecretValue",
-        ],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-        ],
-      })
-    );
+    // Grant access to specific secret instead of '*'
+    db.secretPathTableCreator.grantRead(coglambdaRole);
 
     // Grant access to EC2
     coglambdaRole.addToPolicy(
@@ -729,19 +721,7 @@ export class ApiGatewayStack extends cdk.Stack {
       })
     );
 
-    coglambdaRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          // Secrets Manager
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:PutSecretValue",
-        ],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-        ],
-      })
-    );
+    // Redundant secrets manager access block removed
 
     coglambdaRole.addToPolicy(
       new iam.PolicyStatement({
@@ -1009,16 +989,7 @@ export class ApiGatewayStack extends cdk.Stack {
     });
     lambdaTextGen.addToRolePolicy(textGenBedrockPolicyStatement);
 
-    // Secrets Manager access
-    lambdaTextGen.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["secretsmanager:GetSecretValue"],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-        ],
-      })
-    );
+    // lambdaRole already has read access to db.secretPathUser through the stack-wide policy
 
 
 
@@ -1053,29 +1024,10 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin/*`,
     });
 
-    lambdaKnowledgeBase.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["secretsmanager:GetSecretValue"],
-        resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`],
-      })
-    );
+    // lambdaRole already has read access to db.secretPathUser through the stack-wide policy
 
-    lambdaKnowledgeBase.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          "s3:ListBucket",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-        ], // TODO: tighten S3 resources
-        resources: [
-          "arn:aws:s3:::*",
-          "arn:aws:s3:::*/*",
-        ],
-      })
-    );
+    // Tightly scopes S3 permissions to only the target knowledge base bucket
+    props.knowledgeBaseBucket.grantReadWrite(lambdaKnowledgeBase);
 
     lambdaKnowledgeBase.addToRolePolicy(
       new iam.PolicyStatement({
@@ -1089,10 +1041,9 @@ export class ApiGatewayStack extends cdk.Stack {
           "bedrock:GetIngestionJob",
           "bedrock:StartIngestionJob",
         ],
-        // TODO: need to tighten this to our knowledge base ARN
+        // Tightly scopes Bedrock APIs specifically to knowledge bases
         resources: [
           `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
-          `arn:aws:bedrock:${this.region}:${this.account}:*`,
         ],
       })
     );
