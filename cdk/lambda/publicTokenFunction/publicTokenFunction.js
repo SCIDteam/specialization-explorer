@@ -9,7 +9,7 @@ const { randomUUID } = require("crypto");
 const secretsManager = new SecretsManagerClient();
 let cachedSecret;
 
-exports.handler = async () => {
+exports.handler = async (event) => {
   try {
     if (!cachedSecret) {
       const response = await secretsManager.send(
@@ -29,17 +29,14 @@ exports.handler = async () => {
     );
     return {
       statusCode: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type,Authorization",
-        "Access-Control-Allow-Methods": "GET,OPTIONS",
-      },
+      headers: await getCorsHeaders(event),
       body: JSON.stringify({ token }),
     };
   } catch (error) {
     console.error("Token generation error:", error);
     return {
       statusCode: 500,
+      headers: await getCorsHeaders(event),
       body: JSON.stringify({ error: "Failed to generate token" }),
     };
   }
