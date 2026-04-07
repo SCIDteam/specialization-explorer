@@ -1012,7 +1012,7 @@ exports.handler = async (event) => {
       case "GET /admin/users": {
         try {
           const qs = event.queryStringParameters ?? {};
-          const limit = parseInt(qs.limit ?? "50", 10);
+          const limit = Math.min(parseInt(qs.limit ?? "50", 10), 100); // cap limit to 100
           const offset = parseInt(qs.offset ?? "0", 10);
 
           const rows = await sqlConnection`

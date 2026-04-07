@@ -66,13 +66,7 @@ def check_limit(user_id: str, db_connection) -> tuple[bool, dict]:
     except Exception as e:
         logger.error(f"Error checking token limit DB: {e}")
         # Fail open if DB read fails but everything else is fine
-        usage_info = {
-            "tokens_used": 0, 
-            "limit": config.DAILY_TOKEN_LIMIT, 
-            "remaining": config.DAILY_TOKEN_LIMIT,
-            "reset_at": (now_utc + timedelta(hours=24)).isoformat()
-        }
-        return True, usage_info
+        return False, {"error": "Unable to verify token limits from DB."}
 
 def record_usage(user_id: str, response_text: str, db_connection) -> dict:
     """

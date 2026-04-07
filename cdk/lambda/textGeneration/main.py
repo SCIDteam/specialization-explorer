@@ -30,6 +30,14 @@ def handler(event, context=None):
             }
 
     query = body.get('query')
+    
+    # Perform Query Length Validation 
+    if len(query) > config.MAX_CHARACTERS_PER_USER_MESSAGE:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': f'Query exceeds maximum length of {config.MAX_CHARACTERS_PER_USER_MESSAGE} characters'})
+        }
+    
     chat_session_id = body.get('chat_session_id')
     
     # Fallback to path parameters
