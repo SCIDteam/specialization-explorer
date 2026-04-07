@@ -1,4 +1,5 @@
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -62,7 +63,7 @@ const handleError = (error, response) => {
 };
 
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
   let data;
 
   try {

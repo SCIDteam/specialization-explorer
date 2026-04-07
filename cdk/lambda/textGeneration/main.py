@@ -1,6 +1,7 @@
 
 import boto3.exceptions
 import json
+from helpers.cors import get_cors_headers
 import logging
 import os
 import boto3
@@ -170,12 +171,7 @@ def handler(event, context=None):
 
         return {
             'statusCode': status_code,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': '*',
-                'Access-Control-Allow-Methods': '*'
-            },
+            'headers': { 'Content-Type': 'application/json', **get_cors_headers(event if 'event' in locals() else {}) },
             'body': json.dumps(response_body)
         }
         
@@ -183,11 +179,6 @@ def handler(event, context=None):
         logger.error(f"Error: {e}", exc_info=True)
         return {
             'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': '*',
-                'Access-Control-Allow-Methods': '*'
-            },
+            'headers': { 'Content-Type': 'application/json', **get_cors_headers(event if 'event' in locals() else {}) },
             'body': json.dumps({'error': 'Internal server error'})
         }

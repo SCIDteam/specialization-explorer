@@ -3,6 +3,7 @@ const {
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
 const jwt = require("jsonwebtoken");
+const { getCorsHeaders } = require("./cors.js");
 const { randomUUID } = require("crypto");
 
 const secretsManager = new SecretsManagerClient();

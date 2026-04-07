@@ -11,6 +11,7 @@
  */
 
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -78,7 +79,7 @@ const handleError = (error, response) => {
  * @returns {Object} HTTP response object with statusCode, headers, and body
  */
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
 
   const callerRole = event.requestContext?.authorizer?.role;
   if (callerRole !== 'admin') {

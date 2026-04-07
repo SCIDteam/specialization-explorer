@@ -21,6 +21,7 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
+import * as cr from "aws-cdk-lib/custom-resources";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
@@ -59,6 +60,29 @@ export class ApiGatewayStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
+
+    const crParams = {
+      service: 'SSM',
+      action: 'putParameter',
+      parameters: {
+        Name: '/SpecEx/API/AllowedOrigins',
+        Value: '*',
+        Type: 'String',
+        Description: 'List of allowed CORS origins for the API',
+      },
+      physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
+      ignoreErrorCodesMatching: 'ParameterAlreadyExists',
+    };
+
+    const initAllowedOrigins = new cr.AwsCustomResource(this, 'InitAllowedOriginsParamV2', {
+      onCreate: crParams,
+      onUpdate: crParams,
+      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      }),
+    });
+
+    
     this.layerList = {};
     /**
      *
@@ -845,6 +869,38 @@ export class ApiGatewayStack extends cdk.Stack {
       memorySize: 128,
       role: coglambdaRole,
     });
+
+    preSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    preSignupLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    publicTokenLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    publicTokenLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    userAuthFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    userAuthFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    adminAuthorizationFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    adminAuthorizationFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
     this.userPool.addTrigger(
       cognito.UserPoolOperation.PRE_SIGN_UP,
       preSignupLambda
@@ -914,6 +970,22 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/chat_sessions*`,
     });
 
+    lambdaTextGen.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaTextGen.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    AutoSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    AutoSignupLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     // Bedrock permissions
     const textGenBedrockPolicyStatement = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -967,6 +1039,14 @@ export class ApiGatewayStack extends cdk.Stack {
         KNOWLEDGE_BASE_BUCKET_NAME: props.knowledgeBaseBucket.bucketName,
       },
     });
+
+    lambdaKnowledgeBase.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaKnowledgeBase.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
 
     const cfnLambdaKnowledgeBase = lambdaKnowledgeBase.node.defaultChild as lambda.CfnFunction;
     cfnLambdaKnowledgeBase.overrideLogicalId("lambdaKnowledgeBase");
@@ -1075,6 +1155,14 @@ export class ApiGatewayStack extends cdk.Stack {
       tracing: lambda.Tracing.ACTIVE,
     });
 
+    lambdaUserFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaUserFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     lambdaUserFunction.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
@@ -1109,6 +1197,14 @@ export class ApiGatewayStack extends cdk.Stack {
       role: lambdaRole,
       tracing: lambda.Tracing.ACTIVE,
     });
+
+    lambdaSystemMessagesFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaSystemMessagesFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
 
     lambdaSystemMessagesFunction.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
@@ -1170,6 +1266,14 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/chat_sessions*`,
     });
 
+    lambdaChatSessionFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaChatSessionFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     const cfnLambda_chatSession = lambdaChatSessionFunction.node
       .defaultChild as lambda.CfnFunction;
     cfnLambda_chatSession.overrideLogicalId("chatSessionFunction");
@@ -1201,6 +1305,14 @@ export class ApiGatewayStack extends cdk.Stack {
       action: "lambda:InvokeFunction",
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin*`,
     });
+
+    lambdaAdminFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaAdminFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
 
     //TODO: REMOVE IN PRODUCTION - allows invoking admin Lambda from API Gateway test stage for easier testing
     lambdaAdminFunction.addPermission("AllowTestInvoke", {
@@ -1235,6 +1347,14 @@ export class ApiGatewayStack extends cdk.Stack {
       layers: [jwt],
     });
 
+    connectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    connectFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     // Disconnect Lambda
     const disconnectFunction = new lambda.Function(
       this,
@@ -1259,6 +1379,22 @@ export class ApiGatewayStack extends cdk.Stack {
       },
       functionName: `${id}-DefaultFunction`,
     });
+
+    defaultFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    defaultFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    disconnectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    disconnectFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
 
     // Grant permissions to post to connections
     const wsPolicy = new iam.PolicyStatement({

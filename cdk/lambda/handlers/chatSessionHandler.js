@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { getCorsHeaders } = require("./utils/cors.js");
 const postgres = require("postgres");
 const {
   SecretsManagerClient,
@@ -62,7 +63,7 @@ const handleError = (error, response) => {
 };
 
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
   let data;
 
   try {
