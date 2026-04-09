@@ -1,5 +1,6 @@
 import os
 import json
+from helpers.cors import get_cors_headers
 import time
 import boto3
 import logging
@@ -34,9 +35,7 @@ def _response(status_code: int, body: dict):
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "*",
+            **get_cors_headers(event if "event" in locals() else {})
         },
         "body": json.dumps(body),
     }

@@ -1,4 +1,5 @@
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -36,15 +37,10 @@ const initConnection = async () => {
   }
 };
 
-const createResponse = () => ({
-  statusCode: 200,
-  headers: {
-    "Access-Control-Allow-Headers":
-      "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-  },
-  body: "",
+const createResponse = async (event) => ({
+    statusCode: 200,
+    headers: await getCorsHeaders(event),
+    body: "",
 });
 
 const parseBody = (body) => {
@@ -62,7 +58,7 @@ const handleError = (error, response) => {
 };
 
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
   let data;
 
   try {
@@ -80,13 +76,7 @@ exports.handler = async (event) => {
         const body = parseBody(event.body);
 
         // Default role is student
-        const role = body.role || "student";
-        if (!["student", "admin"].includes(role)) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Invalid role" });
-          break;
-        }
-
+        const role = "student";
         const userId = crypto.randomUUID();
         const email = body.email || null;
         const displayName = body.display_name || body.displayName || null;
@@ -326,171 +316,6 @@ exports.handler = async (event) => {
         break;
       }
 
-      case "POST /user_sessions/{session_id}/interactions":
-        const sessionId2 = event.pathParameters?.session_id;
-        if (!sessionId2) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Session ID is required" });
-          break;
-        }
-
-        // Validate user session by primary key
-        const userSession2 = await sqlConnection`
-          SELECT id FROM user_sessions WHERE id = ${sessionId2}
-        `;
-
-        if (userSession2.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "User session not found" });
-          break;
-        }
-
-        const userSessionId2 = userSession2[0].id;
-        const createData = parseBody(event.body);
-        const {
-          chat_session_id,
-          sender_role,
-          query_text,
-          response_text,
-          message_meta,
-          source_chunks,
-          order_index,
-        } = createData;
-
-        if (!sender_role) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "sender_role is required" });
-          break;
-        }
-
-        if (!chat_session_id) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "chat_session_id is required",
-          });
-          break;
-        }
-
-        // Ensure the chat session belongs to the provided user session
-        const chatSessionCheck = await sqlConnection`
-          SELECT id FROM chat_sessions WHERE id = ${chat_session_id} AND user_session_id = ${userSessionId2}
-        `;
-        if (chatSessionCheck.length === 0) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Invalid chat_session_id for this session",
-          });
-          break;
-        }
-
-        const newInteraction = await sqlConnection`
-          INSERT INTO user_interactions (chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, order_index)
-          VALUES (${chat_session_id}, ${sender_role}, ${query_text || null}, ${response_text || null
-          }, ${message_meta || {}}, ${source_chunks || []}, ${order_index || null
-          })
-          RETURNING id, chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, created_at, order_index
-        `;
-
-        response.statusCode = 201;
-        data = {
-          ...newInteraction[0],
-          session_id: newInteraction[0].chat_session_id,
-        };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "GET /interactions/{interaction_id}":
-        const interactionId = event.pathParameters?.interaction_id;
-        if (!interactionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Interaction ID is required",
-          });
-          break;
-        }
-
-        const interaction = await sqlConnection`
-          SELECT id, chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, created_at, order_index
-          FROM user_interactions
-          WHERE id = ${interactionId}
-        `;
-
-        if (interaction.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Interaction not found" });
-          break;
-        }
-
-        data = {
-          ...interaction[0],
-          session_id: interaction[0].chat_session_id,
-        };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "PUT /interactions/{interaction_id}":
-        const updateInteractionId = event.pathParameters?.interaction_id;
-        if (!updateInteractionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Interaction ID is required",
-          });
-          break;
-        }
-
-        const updateData = parseBody(event.body);
-        const {
-          sender_role: updateSenderRole,
-          query_text: updateQueryText,
-          response_text: updateResponseText,
-          message_meta: updateMessageMeta,
-          source_chunks: updateSourceChunks,
-          order_index: updateOrderIndex,
-        } = updateData;
-
-        const updated = await sqlConnection`
-          UPDATE user_interactions 
-          SET sender_role = ${updateSenderRole}, query_text = ${updateQueryText}, response_text = ${updateResponseText}, 
-              message_meta = ${updateMessageMeta || {}}, source_chunks = ${updateSourceChunks || []
-          }, order_index = ${updateOrderIndex}
-          WHERE id = ${updateInteractionId}
-          RETURNING id, chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, created_at, order_index
-        `;
-
-        if (updated.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Interaction not found" });
-          break;
-        }
-
-        data = { ...updated[0], session_id: updated[0].chat_session_id };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "DELETE /interactions/{interaction_id}":
-        const deleteInteractionId = event.pathParameters?.interaction_id;
-        if (!deleteInteractionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Interaction ID is required",
-          });
-          break;
-        }
-
-        const deleted = await sqlConnection`
-          DELETE FROM user_interactions WHERE id = ${deleteInteractionId} RETURNING id
-        `;
-
-        if (deleted.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Interaction not found" });
-          break;
-        }
-
-        response.statusCode = 204;
-        response.body = "";
-        break;
-
       case "GET /user_sessions/{session_id}/analytics":
         const analyticsSessionId = event.pathParameters?.session_id;
         if (!analyticsSessionId) {
@@ -556,6 +381,13 @@ exports.handler = async (event) => {
           break;
         }
 
+        const authenticatedUserId = event?.requestContext?.authorizer?.userId;
+        if (!authenticatedUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
         // Validate user session by primary key
         const userSessionCreate = await sqlConnection`
           SELECT id FROM user_sessions WHERE id = ${createAnalyticsSessionId}
@@ -578,9 +410,9 @@ exports.handler = async (event) => {
         }
 
         const newAnalytics = await sqlConnection`
-          INSERT INTO analytics_events (user_session_id, event_type, properties)
-          VALUES (${userSessionCreateId}, ${event_type}, ${properties || {}})
-          RETURNING id, user_session_id, event_type, properties, created_at
+          INSERT INTO analytics_events (user_id, chat_session_id, event_type, properties)
+          VALUES (${authenticatedUserId}, ${userSessionCreateId}, ${event_type}, ${properties || {}})
+          RETURNING id, user_id, chat_session_id, event_type, properties, created_at
         `;
 
         response.statusCode = 201;
@@ -588,69 +420,125 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
 
-      case "GET /analytics/{analytics_id}":
+      case "GET /analytics/{analytics_id}": {
+        const authenticatedAnalyticsUserId = event?.requestContext?.authorizer?.userId;
         const analyticsId = event.pathParameters?.analytics_id;
+
         if (!analyticsId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Analytics ID is required" });
           break;
         }
 
+        if (!authenticatedAnalyticsUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
         const analyticsEvent = await sqlConnection`
-          SELECT id, user_session_id, event_type, properties, created_at
+          SELECT id, user_id, chat_session_id, event_type, properties, created_at
           FROM analytics_events
           WHERE id = ${analyticsId}
         `;
 
         if (analyticsEvent.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsEvent[0].user_id !== authenticatedAnalyticsUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
           break;
         }
 
         data = analyticsEvent[0];
         response.body = JSON.stringify(data);
         break;
+      }
 
-      case "PUT /analytics/{analytics_id}":
+      case "PUT /analytics/{analytics_id}": {
+        const authenticatedUpdateUserId = event?.requestContext?.authorizer?.userId;
         const updateAnalyticsId = event.pathParameters?.analytics_id;
+
         if (!updateAnalyticsId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Analytics ID is required" });
           break;
         }
 
-        const updateAnalyticsData = parseBody(event.body);
-        const { event_type: updateEventType, properties: updateProperties } =
-          updateAnalyticsData;
-
-        const updatedAnalytics = await sqlConnection`
-          UPDATE analytics_events 
-          SET event_type = ${updateEventType}, properties = ${updateProperties || {}
-          }
-          WHERE id = ${updateAnalyticsId}
-          RETURNING id, user_session_id, event_type, properties, created_at
-        `;
-
-        if (updatedAnalytics.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
+        if (!authenticatedUpdateUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
           break;
         }
+
+        const analyticsToUpdate = await sqlConnection`
+          SELECT id, user_id
+          FROM analytics_events
+          WHERE id = ${updateAnalyticsId}
+        `;
+
+        if (analyticsToUpdate.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsToUpdate[0].user_id !== authenticatedUpdateUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
+          break;
+        }
+
+        const updateAnalyticsData = parseBody(event.body);
+        const { event_type: updateEventType, properties: updateProperties } = updateAnalyticsData;
+
+        const updatedAnalytics = await sqlConnection`
+          UPDATE analytics_events
+          SET event_type = ${updateEventType}, properties = ${updateProperties || {}}
+          WHERE id = ${updateAnalyticsId}
+          RETURNING id, user_id, chat_session_id, event_type, properties, created_at
+        `;
 
         data = updatedAnalytics[0];
         response.body = JSON.stringify(data);
         break;
+      }
 
-      case "DELETE /analytics/{analytics_id}":
+      case "DELETE /analytics/{analytics_id}": {
+        const authenticatedDeleteUserId = event?.requestContext?.authorizer?.userId;
         const deleteAnalyticsId = event.pathParameters?.analytics_id;
+
         if (!deleteAnalyticsId) {
           response.statusCode = 400;
           response.body = JSON.stringify({ error: "Analytics ID is required" });
+          break;
+        }
+
+        if (!authenticatedDeleteUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
+        const analyticsToDelete = await sqlConnection`
+          SELECT id, user_id
+          FROM analytics_events
+          WHERE id = ${deleteAnalyticsId}
+        `;
+
+        if (analyticsToDelete.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsToDelete[0].user_id !== authenticatedDeleteUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
           break;
         }
 
@@ -660,18 +548,41 @@ exports.handler = async (event) => {
 
         if (deletedAnalytics.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
+          response.body = JSON.stringify({ error: "Analytics event not found" });
           break;
         }
 
         response.statusCode = 204;
         response.body = "";
         break;
+      }
 
       // GET /public/config/userGuidelines - Public endpoint to fetch user guidelines
       case "GET /public/config/userGuidelines":
+
+        if (!authenticatedDeleteUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
+          break;
+        }
+
+        const analyticsToDelete = await sqlConnection`
+          SELECT id, user_id
+          FROM analytics_events
+          WHERE id = ${deleteAnalyticsId}
+        `;
+
+        if (analyticsToDelete.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Analytics event not found" });
+          break;
+        }
+
+        if (analyticsToDelete[0].user_id !== authenticatedDeleteUserId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You do not own this analytics event" });
+          break;
+        }
         try {
           const guidelinesResult = await sqlConnection`
             SELECT value FROM system_settings WHERE key = 'user_guidelines'

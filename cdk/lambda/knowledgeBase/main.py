@@ -1,5 +1,6 @@
 import os
 import json
+from helpers.cors import get_cors_headers
 import boto3
 import logging
 import psycopg2
@@ -53,7 +54,8 @@ def _connect_to_db():
                 'user': db_secret["username"],
                 'password': db_secret["password"],
                 'host': RDS_PROXY_ENDPOINT,
-                'port': db_secret["port"]
+                'port': db_secret["port"], 
+                'sslmode': 'require'
             }
             connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
             connection = psycopg2.connect(connection_string)
@@ -69,12 +71,7 @@ def _connect_to_db():
 def _response(status_code: int, body: dict):
     return {
         "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Methods": "*",
-        },
+        "headers": { "Content-Type": "application/json", **get_cors_headers(event if "event" in locals() else {}) },
         "body": json.dumps(body),
     }
 

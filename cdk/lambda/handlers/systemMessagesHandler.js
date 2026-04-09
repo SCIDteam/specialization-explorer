@@ -1,4 +1,5 @@
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
     SecretsManagerClient,
     GetSecretValueCommand,
@@ -36,14 +37,9 @@ const initConnection = async () => {
     }
 };
 
-const createResponse = () => ({
+const createResponse = async (event) => ({
     statusCode: 200,
-    headers: {
-        "Access-Control-Allow-Headers":
-            "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "*",
-    },
+    headers: await getCorsHeaders(event),
     body: "",
 });
 
@@ -62,7 +58,7 @@ const handleError = (error, response) => {
 };
 
 exports.handler = async (event) => {
-    const response = createResponse();
+    const response = await createResponse(event);
     let data;
 
     try {

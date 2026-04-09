@@ -1,5 +1,6 @@
 import os
 import json
+from helpers.cors import get_cors_headers
 import logging
 import boto3
 
@@ -18,12 +19,7 @@ s3_client = boto3.client("s3", region_name=REGION)
 def _response(status_code: int, body: dict):
     return {
         "statusCode": status_code,
-        "headers": {
-            "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Methods": "*",
-        },
+        "headers": { "Content-Type": "application/json", **get_cors_headers(event if "event" in locals() else {}) },
         "body": json.dumps(body),
     }
 

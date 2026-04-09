@@ -93,7 +93,7 @@ export class DatabaseStack extends Stack {
         }),
         description: "Empty parameter group",
         parameters: {
-          "rds.force_ssl": "0",
+          "rds.force_ssl": "1",
         },
       }
     );
@@ -198,7 +198,7 @@ export class DatabaseStack extends Stack {
       vpc: vpcStack.vpc,
       role: rdsProxyRole,
       securityGroups: this.dbInstance.connections.securityGroups,
-      requireTLS: false,
+      requireTLS: true,
     });
 
     rdsProxy.node.addDependency(serviceLinkedRole);

@@ -11,6 +11,7 @@
  */
 
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -47,15 +48,10 @@ const initConnection = async () => {
   }
 };
 
-const createResponse = () => ({
-  statusCode: 200,
-  headers: {
-    "Access-Control-Allow-Headers":
-      "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-  },
-  body: "",
+const createResponse = async (event) => ({
+    statusCode: 200,
+    headers: await getCorsHeaders(event),
+    body: "",
 });
 
 const parseBody = (body) => {
@@ -78,7 +74,14 @@ const handleError = (error, response) => {
  * @returns {Object} HTTP response object with statusCode, headers, and body
  */
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
+
+  const callerRole = event.requestContext?.authorizer?.role;
+  if (callerRole !== 'admin') {
+    response.statusCode = 403;
+    response.body = JSON.stringify({ error: 'Admin access required' });
+    return response;
+  }
 
   // Ensure database connection is ready
   await initConnection();
@@ -255,11 +258,10 @@ exports.handler = async (event) => {
           break;
         }
 
-        // Validate adminEmail
-        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        const adminEmail = event.requestContext?.authorizer?.email;
         if (!adminEmail) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "adminEmail is required" });
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -273,7 +275,7 @@ exports.handler = async (event) => {
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -438,11 +440,10 @@ exports.handler = async (event) => {
           break;
         }
 
-        // validate
-        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        const adminEmail = event.requestContext?.authorizer?.email;
         if (!adminEmail) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "adminEmail is required" });
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -456,7 +457,7 @@ exports.handler = async (event) => {
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -584,11 +585,10 @@ exports.handler = async (event) => {
           break;
         }
 
-        // validate
-        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        const adminEmail = event.requestContext?.authorizer?.email;
         if (!adminEmail) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "adminEmail is required" });
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -602,7 +602,7 @@ exports.handler = async (event) => {
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -1008,7 +1008,7 @@ exports.handler = async (event) => {
       case "GET /admin/users": {
         try {
           const qs = event.queryStringParameters ?? {};
-          const limit = parseInt(qs.limit ?? "50", 10);
+          const limit = Math.min(parseInt(qs.limit ?? "50", 10), 100); // cap limit to 100
           const offset = parseInt(qs.offset ?? "0", 10);
 
           const rows = await sqlConnection`
@@ -1146,11 +1146,11 @@ exports.handler = async (event) => {
           break;
         }
 
-        // validation
-        const updatedByEmail = body.updated_by_email;
-        if (!updatedByEmail || typeof updatedByEmail !== "string") {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "updated_by_email is required" });
+        // validate user
+        const adminEmail = event.requestContext?.authorizer?.email;
+        if (!adminEmail) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -1240,17 +1240,17 @@ exports.handler = async (event) => {
           break;
         }
 
-        // get admin user ID using email
+        // get admin user ID and confirm role
         const adminRows = await sqlConnection`
           SELECT id, role
           FROM users
-          WHERE email = ${updatedByEmail}
+          WHERE email = ${adminEmail}
           LIMIT 1
         `;
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 

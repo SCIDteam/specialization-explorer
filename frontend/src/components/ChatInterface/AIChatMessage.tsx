@@ -6,7 +6,17 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
+import rehypeSanitize from "rehype-sanitize";
 import TypingIndicator from "./TypingIndicator";
+
+const isSafeUrl = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+};
 
 type AIChatMessageProps = {
   text: string;
@@ -40,7 +50,7 @@ export default function AIChatMessage({
               <span className="font-medium text-xs">Source link:</span>
             </div>
             <a
-              href={urlMatch[0]}
+              href={isSafeUrl(urlMatch[0]) ? urlMatch[0] : "#"}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline hover:text-primary/80 transition-colors break-words pl-4 text-xs"
@@ -95,7 +105,7 @@ export default function AIChatMessage({
               )}
               {isWeb ? (
                 <a
-                  href={displayUrl}
+                  href={isSafeUrl(displayUrl) ? displayUrl : "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline hover:text-primary/80 transition-colors text-xs font-medium break-all"
@@ -131,7 +141,7 @@ export default function AIChatMessage({
           ) : (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw, rehypeHighlight]}
+              rehypePlugins={[rehypeSanitize, rehypeHighlight]}
               components={{
                 // Headers
                 h1: ({ ...props }) => (
@@ -165,6 +175,7 @@ export default function AIChatMessage({
                 a: ({ ...props }) => (
                   <a
                     {...props}
+                    href={props.href && isSafeUrl(props.href) ? props.href : "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"

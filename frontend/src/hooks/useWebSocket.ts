@@ -96,11 +96,6 @@ export const useWebSocket = (
       return;
     }
 
-    console.log(
-      `[WebSocket] Connecting to: ${url} (attempt ${
-        reconnectAttemptsRef.current + 1
-      })`
-    );
     setConnectionState("connecting");
 
     try {
@@ -116,8 +111,13 @@ export const useWebSocket = (
 
       wsRef.current.onmessage = (event) => {
         try {
+          if (typeof event.data === "string" && event.data.length > 1_000_000) {
+            console.warn("[WebSocket] Received message string exceeds 1MB, ignoring");
+            return;
+          }
+
           const message: WebSocketMessage = JSON.parse(event.data);
-          console.log(message);
+
           console.log("[WebSocket] Received message");
 
           if (message.type === "pong") {

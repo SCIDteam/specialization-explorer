@@ -21,6 +21,7 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
+import * as cr from "aws-cdk-lib/custom-resources";
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
@@ -59,6 +60,29 @@ export class ApiGatewayStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
+
+    const crParams = {
+      service: 'SSM',
+      action: 'putParameter',
+      parameters: {
+        Name: '/SpecEx/API/AllowedOrigins',
+        Value: '*',
+        Type: 'String',
+        Description: 'List of allowed CORS origins for the API',
+      },
+      physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
+      ignoreErrorCodesMatching: 'ParameterAlreadyExists',
+    };
+
+    const initAllowedOrigins = new cr.AwsCustomResource(this, 'InitAllowedOriginsParamV2', {
+      onCreate: crParams,
+      onUpdate: crParams,
+      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      }),
+    });
+
+    
     this.layerList = {};
     /**
      *
@@ -296,12 +320,11 @@ export class ApiGatewayStack extends cdk.Stack {
         loggingLevel: apigateway.MethodLoggingLevel.INFO,
         dataTraceEnabled: true,
         metricsEnabled: true,
-        /*
+        
         accessLogDestination: new apigateway.LogGroupLogDestination(
           accessLogGroup
         ),
-        */
-        /*
+        
         accessLogFormat: apigateway.AccessLogFormat.jsonWithStandardFields({
           caller: true,
           httpMethod: true,
@@ -313,14 +336,13 @@ export class ApiGatewayStack extends cdk.Stack {
           status: true,
           user: true,
         }),
-        */
+        
         methodOptions: {
           // Default for all endpoints
           "/*/*": {
             throttlingRateLimit: 100,
             throttlingBurstLimit: 200,
           },
-
 
           // FREQUENT: Public token endpoint
           "/user/publicToken/GET": {
@@ -588,15 +610,18 @@ export class ApiGatewayStack extends cdk.Stack {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
     });
 
+
+    // Grant access to specific secrets instead of '*'
+    db.secretPathUser.grantRead(lambdaRole);
+    this.secret.grantRead(lambdaRole);
+
+    // Explicitly grant access to the KnowledgeBase ID secret without using a broad wildcard
     lambdaRole.addToPolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
-        actions: [
-          //Secrets Manager
-          "secretsmanager:GetSecretValue",
-        ],
+        actions: ["secretsmanager:GetSecretValue"],
         resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*KnowledgeBase/Id-*`,
         ],
       })
     );
@@ -676,19 +701,8 @@ export class ApiGatewayStack extends cdk.Stack {
       }
     );
 
-    // Grant access to Secret Manager
-    coglambdaRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          //Secrets Manager
-          "secretsmanager:GetSecretValue",
-        ],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-        ],
-      })
-    );
+    // Grant access to specific secret instead of '*'
+    db.secretPathTableCreator.grantRead(coglambdaRole);
 
     // Grant access to EC2
     coglambdaRole.addToPolicy(
@@ -731,19 +745,7 @@ export class ApiGatewayStack extends cdk.Stack {
       })
     );
 
-    coglambdaRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          // Secrets Manager
-          "secretsmanager:GetSecretValue",
-          "secretsmanager:PutSecretValue",
-        ],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-        ],
-      })
-    );
+    // Redundant secrets manager access block removed
 
     coglambdaRole.addToPolicy(
       new iam.PolicyStatement({
@@ -867,6 +869,38 @@ export class ApiGatewayStack extends cdk.Stack {
       memorySize: 128,
       role: coglambdaRole,
     });
+
+    preSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    preSignupLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    publicTokenLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    publicTokenLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    userAuthFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    userAuthFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    adminAuthorizationFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    adminAuthorizationFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
     this.userPool.addTrigger(
       cognito.UserPoolOperation.PRE_SIGN_UP,
       preSignupLambda
@@ -898,54 +932,7 @@ export class ApiGatewayStack extends cdk.Stack {
 
 
 
-    // ========================================================================
-    // ECR Image Waiter Custom Resource
-    // ========================================================================
-    // This custom resource ensures Docker images exist in ECR before
-    // the Docker-based Lambda functions are created, preventing race conditions
-
-    const ecrImageWaiterRole = new iam.Role(this, `${id}-EcrImageWaiterRole`, {
-      assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
-    });
-
-    ecrImageWaiterRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          "ecr:DescribeImages",
-          "ecr:DescribeRepositories",
-          "ecr:BatchGetImage",
-        ],
-        resources: [`arn:aws:ecr:${this.region}:${this.account}:repository/*`],
-      })
-    );
-
-    ecrImageWaiterRole.addToPolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-        ],
-        resources: ["arn:aws:logs:*:*:*"],
-      })
-    );
-
-    const ecrImageWaiterFunction = new lambda.Function(
-      this,
-      `${id}-EcrImageWaiter`,
-      {
-        runtime: lambda.Runtime.NODEJS_22_X,
-        code: lambda.Code.fromAsset("lambda/ecrImageWaiter"),
-        handler: "index.handler",
-        timeout: cdk.Duration.minutes(15),
-        role: ecrImageWaiterRole,
-        functionName: `${id}-EcrImageWaiter`,
-        description: "Custom resource to wait for ECR images to be available",
-        logRetention: logs.RetentionDays.ONE_WEEK,
-      }
-    );
+    // --- ECR Image Waiter code removed as it's handled in KnowledgeBaseStack ---
 
     const lambdaTextGen = new lambda.Function(
       this,
@@ -983,6 +970,22 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/chat_sessions*`,
     });
 
+    lambdaTextGen.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaTextGen.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    AutoSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    AutoSignupLambda.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     // Bedrock permissions
     const textGenBedrockPolicyStatement = new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
@@ -1011,16 +1014,7 @@ export class ApiGatewayStack extends cdk.Stack {
     });
     lambdaTextGen.addToRolePolicy(textGenBedrockPolicyStatement);
 
-    // Secrets Manager access
-    lambdaTextGen.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["secretsmanager:GetSecretValue"],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`,
-        ],
-      })
-    );
+    // lambdaRole already has read access to db.secretPathUser through the stack-wide policy
 
 
 
@@ -1046,6 +1040,14 @@ export class ApiGatewayStack extends cdk.Stack {
       },
     });
 
+    lambdaKnowledgeBase.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaKnowledgeBase.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     const cfnLambdaKnowledgeBase = lambdaKnowledgeBase.node.defaultChild as lambda.CfnFunction;
     cfnLambdaKnowledgeBase.overrideLogicalId("lambdaKnowledgeBase");
 
@@ -1055,29 +1057,10 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin/*`,
     });
 
-    lambdaKnowledgeBase.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: ["secretsmanager:GetSecretValue"],
-        resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:*`],
-      })
-    );
+    // lambdaRole already has read access to db.secretPathUser through the stack-wide policy
 
-    lambdaKnowledgeBase.addToRolePolicy(
-      new iam.PolicyStatement({
-        effect: iam.Effect.ALLOW,
-        actions: [
-          "s3:ListBucket",
-          "s3:GetObject",
-          "s3:PutObject",
-          "s3:DeleteObject",
-        ], // TODO: tighten S3 resources
-        resources: [
-          "arn:aws:s3:::*",
-          "arn:aws:s3:::*/*",
-        ],
-      })
-    );
+    // Tightly scopes S3 permissions to only the target knowledge base bucket
+    props.knowledgeBaseBucket.grantReadWrite(lambdaKnowledgeBase);
 
     lambdaKnowledgeBase.addToRolePolicy(
       new iam.PolicyStatement({
@@ -1091,15 +1074,23 @@ export class ApiGatewayStack extends cdk.Stack {
           "bedrock:GetIngestionJob",
           "bedrock:StartIngestionJob",
         ],
-        // TODO: need to tighten this to our knowledge base ARN
+        // Tightly scopes Bedrock APIs specifically to knowledge bases
         resources: [
           `arn:aws:bedrock:${this.region}:${this.account}:knowledge-base/*`,
-          `arn:aws:bedrock:${this.region}:${this.account}:*`,
         ],
       })
     );
 
-    // allows create/delete per-run schedules
+    lambdaKnowledgeBase.addToRolePolicy(
+      new iam.PolicyStatement({
+        effect: iam.Effect.ALLOW,
+        actions: ["secretsmanager:GetSecretValue"],
+        resources: [
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*KnowledgeBase/Id/playground-*`, //TODO: remove this as we'll merge to a single knowledge base
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*KnowledgeBase/Id-*`
+        ],
+      })
+    );
     lambdaKnowledgeBase.addToRolePolicy(
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
@@ -1164,12 +1155,21 @@ export class ApiGatewayStack extends cdk.Stack {
       tracing: lambda.Tracing.ACTIVE,
     });
 
+    lambdaUserFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaUserFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     lambdaUserFunction.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/member*`,
     });
 
+    //TODO: REMOVE IN PRODUCTION
     lambdaUserFunction.addPermission("AllowTestInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
@@ -1197,6 +1197,14 @@ export class ApiGatewayStack extends cdk.Stack {
       role: lambdaRole,
       tracing: lambda.Tracing.ACTIVE,
     });
+
+    lambdaSystemMessagesFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaSystemMessagesFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
 
     lambdaSystemMessagesFunction.addPermission("AllowApiGatewayInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
@@ -1258,6 +1266,14 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/chat_sessions*`,
     });
 
+    lambdaChatSessionFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaChatSessionFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     const cfnLambda_chatSession = lambdaChatSessionFunction.node
       .defaultChild as lambda.CfnFunction;
     cfnLambda_chatSession.overrideLogicalId("chatSessionFunction");
@@ -1290,13 +1306,20 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin*`,
     });
 
+    lambdaAdminFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaAdminFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    //TODO: REMOVE IN PRODUCTION - allows invoking admin Lambda from API Gateway test stage for easier testing
     lambdaAdminFunction.addPermission("AllowTestInvoke", {
       principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
       action: "lambda:InvokeFunction",
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/test-invoke-stage/*/*`,
     });
-
-
 
     const cfnLambda_admin = lambdaAdminFunction.node
       .defaultChild as lambda.CfnFunction;
@@ -1324,6 +1347,14 @@ export class ApiGatewayStack extends cdk.Stack {
       layers: [jwt],
     });
 
+    connectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    connectFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
     // Disconnect Lambda
     const disconnectFunction = new lambda.Function(
       this,
@@ -1348,6 +1379,22 @@ export class ApiGatewayStack extends cdk.Stack {
       },
       functionName: `${id}-DefaultFunction`,
     });
+
+    defaultFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    defaultFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
+
+    disconnectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    disconnectFunction.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ["ssm:GetParameter", "ssm:GetParameters"],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+    }));
+
 
     // Grant permissions to post to connections
     const wsPolicy = new iam.PolicyStatement({

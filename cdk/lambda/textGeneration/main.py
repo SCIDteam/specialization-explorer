@@ -1,6 +1,7 @@
 
 import boto3.exceptions
 import json
+from helpers.cors import get_cors_headers
 import logging
 import os
 import boto3
@@ -13,7 +14,9 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 def handler(event, context=None):
-    logger.info("Event: %s", json.dumps(event))
+    # Log event but exclude body to prevent sensitive data exposure (user_id, chat_session_id)
+    safe_event = {k: v for k, v in event.items() if k != 'body'}
+    logger.info("Event: %s (body omitted)", json.dumps(safe_event))
     
     body = {}
     if 'body' in event and event['body']:
@@ -30,6 +33,14 @@ def handler(event, context=None):
             }
 
     query = body.get('query')
+    
+    # Perform Query Length Validation 
+    if len(query) > config.MAX_CHARACTERS_PER_USER_MESSAGE:
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': f'Query exceeds maximum length of {config.MAX_CHARACTERS_PER_USER_MESSAGE} characters'})
+        }
+    
     chat_session_id = body.get('chat_session_id')
     
     # Fallback to path parameters
@@ -162,12 +173,7 @@ def handler(event, context=None):
 
         return {
             'statusCode': status_code,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': '*',
-                'Access-Control-Allow-Methods': '*'
-            },
+            'headers': { 'Content-Type': 'application/json', **get_cors_headers(event if 'event' in locals() else {}) },
             'body': json.dumps(response_body)
         }
         
@@ -175,11 +181,6 @@ def handler(event, context=None):
         logger.error(f"Error: {e}", exc_info=True)
         return {
             'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Headers': '*',
-                'Access-Control-Allow-Methods': '*'
-            },
+            'headers': { 'Content-Type': 'application/json', **get_cors_headers(event if 'event' in locals() else {}) },
             'body': json.dumps({'error': 'Internal server error'})
         }
