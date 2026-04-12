@@ -16,10 +16,13 @@ scheduler_client = boto3.client("scheduler", region_name=REGION)
 s3_client = boto3.client("s3", region_name=REGION)
 
 
-def _response(status_code: int, body: dict):
+def _response(event, status_code: int, body: dict):
     return {
         "statusCode": status_code,
-        "headers": { "Content-Type": "application/json", **get_cors_headers(event if "event" in locals() else {}) },
+        "headers": {
+            "Content-Type": "application/json",
+            **get_cors_headers(event),
+        },
         "body": json.dumps(body),
     }
 
@@ -261,17 +264,17 @@ def add_csv(event, body, connection, kb_id):
     created_by = body.get("created_by")
 
     if not csv_file_name or not csv_s3_bucket or not csv_s3_key:
-        return _response(400, {"error": "Missing CSV file details"})
+        return _response(event, 400, {"error": "Missing CSV file details"})
 
     if not metadata_file_name or not metadata_s3_bucket or not metadata_s3_key:
-        return _response(400, {"error": "Missing metadata JSON file details"})
+        return _response(event, 400, {"error": "Missing metadata JSON file details"})
 
     if not created_by:
-        return _response(400, {"error": "Missing admin who is trying to add this CSV to knowledge base"})
+        return _response(event, 400, {"error": "Missing admin who is trying to add this CSV to knowledge base"})
 
     pair_error = _validate_file_pair(csv_file_name, metadata_file_name)
     if pair_error:
-        return _response(400, {"error": pair_error})
+        return _response(event, 400, {"error": pair_error})
 
     logger.info(
         "Received add csv request: csv=%s metadata=%s created_by=%s",
@@ -286,7 +289,7 @@ def add_csv(event, body, connection, kb_id):
             _assert_s3_object_exists(metadata_s3_bucket, metadata_s3_key)
         except Exception as e:
             logger.error("Uploaded file not found in S3: %s", e, exc_info=True)
-            return _response(400, {"error": "One or both uploaded files do not exist in S3"})
+            return _response(event, 400, {"error": "One or both uploaded files do not exist in S3"})
 
         all_data_sources = _list_all_data_sources(kb_id)
 
@@ -298,12 +301,14 @@ def add_csv(event, body, connection, kb_id):
 
         if not s3_data_sources:
             return _response(
+                event,
                 500,
                 {"error": "No S3 data source found in the knowledge base."},
             )
 
         if len(s3_data_sources) > 1:
             return _response(
+                event,
                 409,
                 {"error": "Multiple S3 data sources found. Expected exactly one allocated S3 data source."},
             )
@@ -313,7 +318,7 @@ def add_csv(event, body, connection, kb_id):
 
         created_by_user_id = _get_user_id_by_email(connection, created_by)
         if not created_by_user_id:
-            return _response(400, {"error": "Admin user not found in database"})
+            return _response(event, 400, {"error": "Admin user not found in database"})
 
         try:
             csv_metadata = {
@@ -403,6 +408,7 @@ def add_csv(event, body, connection, kb_id):
             raise
 
         return _response(
+            event,
             200,
             {
                 "message": "CSV and metadata JSON registered successfully and ingestion started.",
@@ -424,4 +430,4 @@ def add_csv(event, body, connection, kb_id):
 
     except Exception as e:
         logger.error("Failed to add CSV files to Bedrock knowledge base: %s", e, exc_info=True)
-        return _response(500, {"error": "Failed to add CSV files to knowledge base"})
+        return _response(event, 500, {"error": "Failed to add CSV files to knowledge base"})

@@ -68,10 +68,13 @@ def _connect_to_db():
             raise
     return connection
 
-def _response(status_code: int, body: dict):
+def _response(event, status_code: int, body: dict):
     return {
         "statusCode": status_code,
-        "headers": { "Content-Type": "application/json", **get_cors_headers(event if "event" in locals() else {}) },
+        "headers": {
+            "Content-Type": "application/json",
+            **get_cors_headers(event),
+        },
         "body": json.dumps(body),
     }
 
@@ -124,21 +127,21 @@ def handler(event, context=None):
         try:
             body = _parse_body(event)
         except ValueError as e:
-            return _response(400, {"error": str(e)})
+            return _response(event, 400, {"error": str(e)})
         
         # connect to database
         try:
             connection = _connect_to_db()
         except Exception as e:
             logger.error(f"Error connecting to database: {e}")
-            return _response(500, {"error": "Error connecting to database"})
-        
+            return _response(event, 500, {"error": "Error connecting to database"})
+
         # get knowledge base ID
         try:
             kb_id = _get_secret(KB_SECRET_NAME, expect_json=False)
         except Exception as e:
             logger.error(f"Error getting knowledge base ID: {e}")
-            return _response(500, {"error": "Error getting knowledge base ID"})
+            return _response(event, 500, {"error": "Error getting knowledge base ID"})
 
         # Route: POST /admin/data_sources/website
         if method == "POST" and (
@@ -155,6 +158,7 @@ def handler(event, context=None):
             return add_csv(event=event, body=body, connection=connection, kb_id=kb_id)
 
         return _response(
+            event,
             404,
             {
                 "error": "Route not found",
@@ -166,4 +170,4 @@ def handler(event, context=None):
 
     except Exception as e:
         logger.error("Error: %s", e, exc_info=True)
-        return _response(500, {"error": "Internal server error"})
+        return _response(event, 500, {"error": "Internal server error"})

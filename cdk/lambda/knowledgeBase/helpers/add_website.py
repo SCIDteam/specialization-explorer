@@ -28,10 +28,13 @@ SUCCESS_STATUSES = {"COMPLETE"}
 bedrock_agent = boto3.client("bedrock-agent", region_name=REGION)
 scheduler_client = boto3.client("scheduler", region_name=REGION)
 
-def _response(status_code: int, body: dict):
+def _response(event, status_code: int, body: dict):
     return {
         "statusCode": status_code,
-        "headers": { "Content-Type": "application/json", **get_cors_headers(event if "event" in locals() else {}) },
+        "headers": {
+            "Content-Type": "application/json",
+            **get_cors_headers(event),
+        },
         "body": json.dumps(body),
     }
 
@@ -545,16 +548,16 @@ def add_website(event, body, connection, kb_id):
     created_by = body.get("created_by")
 
     if not name:
-        return _response(400, {"error": "Missing name of the website"})
+        return _response(event, 400, {"error": "Missing name of the website"})
 
     if not created_by:
-        return _response(400, {"error": "Missing admin who is trying to add this website to knowledge base"})
+        return _response(event, 400, {"error": "Missing admin who is trying to add this website to knowledge base"})
 
     if not isinstance(include_patterns, list):
-        return _response(400, {"error": "include_patterns must be an array"})
+        return _response(event, 400, {"error": "include_patterns must be an array"})
 
     if not isinstance(exclude_patterns, list):
-        return _response(400, {"error": "exclude_patterns must be an array"})
+        return _response(event, 400, {"error": "exclude_patterns must be an array"})
 
     logger.info(
         "Received add website request: name=%s include_patterns=%s exclude_patterns=%s created_by=%s",
@@ -583,6 +586,7 @@ def add_website(event, body, connection, kb_id):
         for item in classified:
             if name in item["seed_urls"]:
                 return _response(
+                    event,
                     200,
                     {
                         "message": "URL already exists in a web crawler data source.",
@@ -607,7 +611,7 @@ def add_website(event, body, connection, kb_id):
 
             created_by_user_id = _get_user_id_by_email(connection, created_by)
             if not created_by_user_id:
-                return _response(400, {"error": "Admin user not found in database"})
+                return _response(event, 400, {"error": "Admin user not found in database"})
 
             try:
                 db_metadata = {
@@ -655,6 +659,7 @@ def add_website(event, body, connection, kb_id):
                 raise
 
             return _response(
+                event,
                 200,
                 {
                     "message": "Website URL added to existing web crawler data source and ingestion started.",
@@ -675,6 +680,7 @@ def add_website(event, body, connection, kb_id):
         if web_count < MAX_WEB_DATA_SOURCES:
             if not web_crawlers:
                 return _response(
+                    event,
                     500,
                     {
                         "error": "No existing web crawler template found. At least one web crawler data source must already exist."
@@ -693,7 +699,7 @@ def add_website(event, body, connection, kb_id):
 
             created_by_user_id = _get_user_id_by_email(connection, created_by)
             if not created_by_user_id:
-                return _response(400, {"error": "Admin user not found in database"})
+                return _response(event, 400, {"error": "Admin user not found in database"})
 
             try:
                 db_metadata = {
@@ -741,6 +747,7 @@ def add_website(event, body, connection, kb_id):
                 raise
 
             return _response(
+                event,
                 200,
                 {
                     "message": "Website URL added by creating a new web crawler data source and starting ingestion.",
@@ -758,6 +765,7 @@ def add_website(event, body, connection, kb_id):
 
         if _all_web_crawlers_syncing(classified):
             return _response(
+                event,
                 409,
                 {
                     "error": "All web crawler data sources are currently syncing. Please wait for current ingestions to finish before adding more URLs."
@@ -765,6 +773,7 @@ def add_website(event, body, connection, kb_id):
             )
 
         return _response(
+            event,
             409,
             {
                 "error": "The knowledge base is at capacity for website crawling. No additional web crawler data sources are available."
@@ -773,4 +782,4 @@ def add_website(event, body, connection, kb_id):
 
     except Exception as e:
         logger.error("Failed to add website URL to Bedrock knowledge base: %s", e, exc_info=True)
-        return _response(500, {"error": "Failed to add website URL to knowledge base"})
+        return _response(event, 500, {"error": "Failed to add website URL to knowledge base"})

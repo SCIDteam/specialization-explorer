@@ -29,21 +29,18 @@ s3 = boto3.client(
     ),
 )
 
-
-def _response(status_code: int, body: dict):
+def _response(event, status_code: int, body: dict):
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
-            **get_cors_headers(event if "event" in locals() else {})
+            **get_cors_headers(event),
         },
         "body": json.dumps(body),
     }
 
-
 def _sanitize_file_name(file_name: str) -> str:
     return os.path.basename(file_name).strip()
-
 
 def _infer_upload_prefix(file_name: str, content_type: str) -> str:
     lower_name = file_name.lower()
@@ -56,7 +53,6 @@ def _infer_upload_prefix(file_name: str, content_type: str) -> str:
 
     return "uploads/files"
 
-
 def generate_presigned_url(event):
     query_params = event.get("queryStringParameters") or {}
 
@@ -64,14 +60,15 @@ def generate_presigned_url(event):
     content_type = query_params.get("content_type", "application/octet-stream")
 
     if not file_name:
-        return _response(400, {"error": "Missing file_name parameter"})
+        return _response(event, 400, {"error": "Missing file_name parameter"})
 
     file_name = _sanitize_file_name(file_name)
     if not file_name:
-        return _response(400, {"error": "Invalid file_name parameter"})
+        return _response(event, 400, {"error": "Invalid file_name parameter"})
 
     if content_type not in ALLOWED_CONTENT_TYPES:
         return _response(
+            event,
             400,
             {
                 "error": "Unsupported content_type",
@@ -82,10 +79,10 @@ def generate_presigned_url(event):
     lower_name = file_name.lower()
 
     if lower_name.endswith(".csv") and content_type not in {"text/csv", "application/octet-stream"}:
-        return _response(400, {"error": "CSV files must use content_type text/csv or application/octet-stream"})
+        return _response(event, 400, {"error": "CSV files must use content_type text/csv or application/octet-stream"})
 
     if lower_name.endswith(".json") and content_type not in {"application/json", "text/json", "application/octet-stream"}:
-        return _response(400, {"error": "JSON files must use content_type application/json, text/json, or application/octet-stream"})
+        return _response(event, 400, {"error": "JSON files must use content_type application/json, text/json, or application/octet-stream"})
 
     prefix = _infer_upload_prefix(file_name, content_type)
     timestamp = int(time.time())
@@ -104,6 +101,7 @@ def generate_presigned_url(event):
         )
 
         return _response(
+            event,
             200,
             {
                 "presignedUrl": presigned_url,
@@ -114,4 +112,4 @@ def generate_presigned_url(event):
 
     except Exception as e:
         logger.error("Error generating presigned URL: %s", e, exc_info=True)
-        return _response(500, {"error": "Failed to generate presigned URL"})
+        return _response(event, 500, {"error": "Failed to generate presigned URL"})

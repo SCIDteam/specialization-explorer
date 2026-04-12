@@ -16,10 +16,13 @@ scheduler_client = boto3.client("scheduler", region_name=REGION)
 
 RUNNING_STATUSES = {"STARTING", "IN_PROGRESS", "STOPPING"}
 
-def _response(status_code: int, body: dict):
+def _response(event, status_code: int, body: dict):
     return {
         "statusCode": status_code,
-        "headers": { "Content-Type": "application/json", **get_cors_headers(event if "event" in locals() else {}) },
+        "headers": {
+            "Content-Type": "application/json",
+            **get_cors_headers(event),
+        },
         "body": json.dumps(body),
     }
 
@@ -77,6 +80,7 @@ def update_status(event, connection):
 
     if not kb_id or not bedrock_data_source_id or not bedrock_ingestion_job_id or not db_ingestion_run_id or not schedule_name:
         return _response(
+            event,
             400,
             {
                 "error": "Missing required scheduler payload fields",
@@ -110,6 +114,7 @@ def update_status(event, connection):
     normalized_status = _normalize_status(bedrock_status)
     if not normalized_status:
         return _response(
+            event,
             200,
             {
                 "message": "Unsupported or unknown Bedrock ingestion status",
@@ -120,6 +125,7 @@ def update_status(event, connection):
 
     if normalized_status == "running":
         return _response(
+            event,
             200,
             {
                 "message": "Ingestion job still running",
@@ -149,6 +155,7 @@ def update_status(event, connection):
         # DB is already correct; leave schedule cleanup as retriable/manual follow-up
 
     return _response(
+        event,
         200,
         {
             "message": "Updated ingestion run and attempted schedule cleanup",
