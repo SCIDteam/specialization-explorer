@@ -270,12 +270,12 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /admin/data_sources/website:
+  /admin/data_sources:
     <<: *commonOptions
     post:
       tags: [Admin]
-      summary: Add website data source
-      operationId: add_website_data_source
+      summary: Stage data sources for future syncing
+      operationId: add_data_sources
       security:
         - adminAuthorizer: []
       requestBody:
@@ -285,9 +285,16 @@ paths:
             schema:
               type: object
               required:
-                - name
+                - type
                 - created_by
               properties:
+                type:
+                  type: string
+                  enum: [website, csv]
+                  example: website
+                created_by:
+                  type: string
+                  example: example@email.com
                 name:
                   type: string
                   example: https://example.com
@@ -299,12 +306,27 @@ paths:
                   type: array
                   items:
                     type: string
-                created_by:
+                csv_file_name:
                   type: string
-                  example: example@email.com
+                  example: alumni_data_final.csv
+                csv_s3_bucket:
+                  type: string
+                  example: my-kb-bucket
+                csv_s3_key:
+                  type: string
+                  example: uploads/csv/1712345678_alumni_data_final.csv
+                metadata_file_name:
+                  type: string
+                  example: alumni_data_final.csv.metadata.json
+                metadata_s3_bucket:
+                  type: string
+                  example: my-kb-bucket
+                metadata_s3_key:
+                  type: string
+                  example: uploads/json/1712345678_alumni_data_final.csv.metadata.json
       responses:
         "200":
-          description: Website data source request accepted
+          description: Data source(s) staged successfully
           content:
             application/json:
               schema:
@@ -312,22 +334,76 @@ paths:
                 properties:
                   message:
                     type: string
-                  name:
+                  action:
                     type: string
-                  include_patterns:
-                    type: array
-                    items:
-                      type: string
-                  exclude_patterns:
-                    type: array
-                    items:
-                      type: string
+                  type:
+                    type: string
+                    enum: [website, csv]
                   created_by:
                     type: string
+                  staged_data_source_ids:
+                    type: array
+                    items:
+                      type: string
         "400":
           description: Invalid request
         "404":
           description: Route not found
+        "409":
+          description: Conflict
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
+
+  /admin/data_sources/sync:
+    <<: *commonOptions
+    post:
+      tags: [Admin]
+      summary: Queue pending data sources and begin syncing
+      operationId: sync_data_sources
+      security:
+        - adminAuthorizer: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                created_by:
+                  type: string
+                  example: example@email.com
+      responses:
+        "200":
+          description: Sync process started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  action:
+                    type: string
+                  sync_session_id:
+                    type: string
+                  queued_count:
+                    type: integer
+                  s3_queued_count:
+                    type: integer
+                  website_queued_count:
+                    type: integer
+        "400":
+          description: Invalid request
+        "404":
+          description: Route not found
+        "409":
+          description: A sync is already running or no pending data sources exist
         "500":
           description: Internal Server Error
       x-amazon-apigateway-integration:
@@ -386,97 +462,6 @@ paths:
         uri:
           Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
         passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-
-  /admin/data_sources/csv:
-    <<: *commonOptions
-    post:
-      tags: [Admin]
-      summary: Add CSV data source files
-      operationId: add_csv_data_source
-      security:
-        - adminAuthorizer: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - csv_file_name
-                - csv_s3_bucket
-                - csv_s3_key
-                - metadata_file_name
-                - metadata_s3_bucket
-                - metadata_s3_key
-                - created_by
-              properties:
-                csv_file_name:
-                  type: string
-                  example: alumni_data_final.csv
-                csv_s3_bucket:
-                  type: string
-                  example: my-kb-bucket
-                csv_s3_key:
-                  type: string
-                  example: uploads/alumni_data_final.csv
-                metadata_file_name:
-                  type: string
-                  example: alumni_data_final.csv.metadata.json
-                metadata_s3_bucket:
-                  type: string
-                  example: my-kb-bucket
-                metadata_s3_key:
-                  type: string
-                  example: uploads/alumni_data_final.csv.metadata.json
-                created_by:
-                  type: string
-                  example: example@email.com
-      responses:
-        "200":
-          description: CSV files accepted and ingestion started
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-                  action:
-                    type: string
-                  csv_file_name:
-                    type: string
-                  metadata_file_name:
-                    type: string
-                  created_by:
-                    type: string
-                  data_source_id:
-                    type: string
-                  data_source_name:
-                    type: string
-                  ingestion_job_id:
-                    type: string
-                  db_csv_data_source_id:
-                    type: string
-                  db_json_data_source_id:
-                    type: string
-                  db_ingestion_run_id:
-                    type: string
-                  schedule_name:
-                    type: string
-        "400":
-          description: Invalid request
-        "404":
-          description: Route not found
-        "409":
-          description: Invalid S3 data source configuration
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
-        passthroughBehavior: when_no_match
         httpMethod: POST
         type: aws_proxy
 
