@@ -20,6 +20,7 @@ scheduler_client = boto3.client("scheduler", region_name=REGION)
 RUNNING_STATUSES = {"STARTING", "IN_PROGRESS", "STOPPING"}
 
 def _response(event, status_code: int, body: dict):
+    """Build a standard API Gateway JSON response with CORS headers"""
     return {
         "statusCode": status_code,
         "headers": {
@@ -30,6 +31,14 @@ def _response(event, status_code: int, body: dict):
     }
 
 def _normalize_status(bedrock_status: str | None) -> str | None:
+    """
+    Convert a Bedrock ingestion status into the internal ingestion_runs status.
+
+    Supported mappings:
+    - COMPLETE -> completed
+    - FAILED -> failed
+    - STARTING / IN_PROGRESS / STOPPING -> running
+    """
     if bedrock_status == "COMPLETE":
         return "completed"
     if bedrock_status == "FAILED":
@@ -39,6 +48,12 @@ def _normalize_status(bedrock_status: str | None) -> str | None:
     return None
 
 def _looks_like_capacity_failure(failure_reasons: list[str]) -> bool:
+    """
+    Detect whether a Bedrock failure looks like a capacity/max-pages failure.
+
+    This is used to decide when a single failed website should be removed from
+    a full crawler and retried on a different crawler.
+    """
     combined = " ".join(failure_reasons).lower()
     keywords = [
         "maxpages",
@@ -55,6 +70,12 @@ def _looks_like_capacity_failure(failure_reasons: list[str]) -> bool:
     return any(k in combined for k in keywords)
 
 def _update_ingestion_runs(connection, *, ingestion_run_ids: list[str], status: str, error_message: str | None):
+    """
+    Update one or more ingestion_runs rows to the supplied status.
+
+    Terminal statuses (completed, failed) also set completed_at so the admin
+    dashboard can show when the run finished.
+    """
     with connection.cursor() as cursor:
         if status in {"completed", "failed"}:
             cursor.execute(
@@ -83,6 +104,12 @@ def _update_ingestion_runs(connection, *, ingestion_run_ids: list[str], status: 
         return cursor.rowcount
 
 def _get_run_rows(connection, *, ingestion_run_ids: list[str]) -> list[dict]:
+    """
+    Fetch the ingestion_runs rows for the supplied IDs.
+
+    This is used during retry handling so the failed website run can be linked
+    back to its original data_source row.
+    """
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -109,6 +136,12 @@ def _get_run_rows(connection, *, ingestion_run_ids: list[str]) -> list[dict]:
 
 
 def _get_data_source_row(connection, *, data_source_id: str) -> dict | None:
+    """
+    Fetch a data_sources row by ID.
+
+    For website retries this is used to recover the website URL from the
+    original staged website record.
+    """
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -132,6 +165,7 @@ def _get_data_source_row(connection, *, data_source_id: str) -> dict | None:
 
 
 def _get_bedrock_data_source(knowledge_base_id: str, bedrock_data_source_id: str) -> dict:
+    """Fetch the full Bedrock data source configuration for a crawler"""
     resp = bedrock_agent.get_data_source(
         knowledgeBaseId=knowledge_base_id,
         dataSourceId=bedrock_data_source_id,
@@ -145,6 +179,12 @@ def _remove_seed_url_from_bedrock_web_data_source(
     bedrock_data_source_id: str,
     website_url: str,
 ) -> dict:
+    """
+    Remove a website URL from a Bedrock web crawler's seed URL list.
+
+    This is used when a single-website batch fails because the crawler is full.
+    The website is removed from the full crawler before being retried elsewhere.
+    """
     data_source = _get_bedrock_data_source(knowledge_base_id, bedrock_data_source_id)
 
     config = data_source["dataSourceConfiguration"]
@@ -203,6 +243,12 @@ def _insert_retry_ingestion_run(
     sync_session_id: str,
     retry_of_ingestion_run_id: str,
 ) -> str:
+    """
+    Create a new queued ingestion_run for a website retry.
+
+    The original failed run is preserved for history, while the new run becomes
+    the retriable queued record for the same website data source.
+    """
     metadata = {
         "phase": "website",
         "sync_session_id": sync_session_id,
@@ -232,12 +278,29 @@ def _insert_retry_ingestion_run(
 
 
 def _delete_schedule(schedule_name: str):
+    """Delete the polling scheduler once the current ingestion job is no longer running"""
     scheduler_client.delete_schedule(
         Name=schedule_name,
         GroupName="default",
     )
 
 def update_status(event, connection):
+    """
+    Poll the status of a Bedrock ingestion job and advance the sync workflow.
+
+    This method:
+    - validates the scheduler payload
+    - fetches the current Bedrock ingestion job status
+    - updates the corresponding ingestion_runs rows
+    - deletes the polling scheduler when the job reaches a terminal state
+    - handles single-website capacity retries by:
+      - removing the website from the full crawler
+      - creating a new queued retry run
+    - continues the sync workflow by calling:
+      - process_website_batch(...) after S3 completion
+      - process_website_batch(...) after website completion
+      - process_website_batch(...) after a single-website capacity retry
+    """
     logger.info("Scheduler polling event: %s", json.dumps(event))
 
     kb_id = event.get("knowledge_base_id")
@@ -339,7 +402,7 @@ def update_status(event, connection):
         )
 
         # Retry logic:
-        # if a single-website batch failed due to capacity, delete it from the full data source
+        # if a single-website batch failed due to capacity, delete it from the full data source,
         # preserve the failed run, and create a brand new queued retry run for the same website
         if (
             phase == "website"
