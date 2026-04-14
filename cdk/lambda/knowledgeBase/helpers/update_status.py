@@ -108,6 +108,94 @@ def _get_run_rows(connection, *, ingestion_run_ids: list[str]) -> list[dict]:
         return results
 
 
+def _get_data_source_row(connection, *, data_source_id: str) -> dict | None:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT id, name, type, metadata
+            FROM data_sources
+            WHERE id = %s::uuid
+            LIMIT 1
+            """,
+            (data_source_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return {
+            "id": str(row[0]),
+            "name": row[1],
+            "type": row[2],
+            "metadata": row[3] or {},
+        }
+
+
+def _get_bedrock_data_source(knowledge_base_id: str, bedrock_data_source_id: str) -> dict:
+    resp = bedrock_agent.get_data_source(
+        knowledgeBaseId=knowledge_base_id,
+        dataSourceId=bedrock_data_source_id,
+    )
+    return resp["dataSource"]
+
+
+def _remove_seed_url_from_bedrock_web_data_source(
+    *,
+    knowledge_base_id: str,
+    bedrock_data_source_id: str,
+    website_url: str,
+) -> dict:
+    data_source = _get_bedrock_data_source(knowledge_base_id, bedrock_data_source_id)
+
+    config = data_source["dataSourceConfiguration"]
+    web_config = config["webConfiguration"]
+    crawler_config = web_config["crawlerConfiguration"]
+    source_config = web_config["sourceConfiguration"]
+
+    existing_seed_urls = source_config.get("urlConfiguration", {}).get("seedUrls", [])
+    filtered_seed_urls = [x for x in existing_seed_urls if x.get("url") != website_url]
+
+    updated_source_config = {
+        **source_config,
+        "urlConfiguration": {
+            "seedUrls": filtered_seed_urls
+        }
+    }
+
+    updated_data_source_config = {
+        "type": "WEB",
+        "webConfiguration": {
+            "crawlerConfiguration": dict(crawler_config),
+            "sourceConfiguration": updated_source_config,
+        },
+    }
+
+    kwargs = {
+        "knowledgeBaseId": knowledge_base_id,
+        "dataSourceId": data_source["dataSourceId"],
+        "name": data_source["name"],
+        "dataSourceConfiguration": updated_data_source_config,
+        "vectorIngestionConfiguration": data_source["vectorIngestionConfiguration"],
+    }
+
+    if data_source.get("description"):
+        kwargs["description"] = data_source["description"]
+
+    if data_source.get("dataDeletionPolicy"):
+        kwargs["dataDeletionPolicy"] = data_source["dataDeletionPolicy"]
+
+    if data_source.get("serverSideEncryptionConfiguration"):
+        kwargs["serverSideEncryptionConfiguration"] = data_source["serverSideEncryptionConfiguration"]
+
+    logger.info(
+        "Removing failed website URL %s from Bedrock data source %s before retry",
+        website_url,
+        bedrock_data_source_id,
+    )
+
+    resp = bedrock_agent.update_data_source(**kwargs)
+    return resp["dataSource"]
+
 def _insert_retry_ingestion_run(
     connection,
     *,
@@ -251,8 +339,8 @@ def update_status(event, connection):
         )
 
         # Retry logic:
-        # if a single-website batch failed due to capacity, preserve the failed run
-        # and create a brand new queued retry run for the same website
+        # if a single-website batch failed due to capacity, delete it from the full data source
+        # preserve the failed run, and create a brand new queued retry run for the same website
         if (
             phase == "website"
             and normalized_status == "failed"
@@ -262,13 +350,27 @@ def update_status(event, connection):
             run_rows = _get_run_rows(connection, ingestion_run_ids=db_ingestion_run_ids)
             if run_rows:
                 failed_run = run_rows[0]
-                retry_run_id = _insert_retry_ingestion_run(
+                failed_data_source = _get_data_source_row(
                     connection,
                     data_source_id=failed_run["data_source_id"],
-                    sync_session_id=sync_session_id,
-                    retry_of_ingestion_run_id=failed_run["id"],
                 )
-                retry_created_run_ids.append(retry_run_id)
+
+                if failed_data_source and failed_data_source["type"] == "website":
+                    website_url = failed_data_source["name"]
+
+                    _remove_seed_url_from_bedrock_web_data_source(
+                        knowledge_base_id=kb_id,
+                        bedrock_data_source_id=bedrock_data_source_id,
+                        website_url=website_url,
+                    )
+
+                    retry_run_id = _insert_retry_ingestion_run(
+                        connection,
+                        data_source_id=failed_run["data_source_id"],
+                        sync_session_id=sync_session_id,
+                        retry_of_ingestion_run_id=failed_run["id"],
+                    )
+                    retry_created_run_ids.append(retry_run_id)
 
         connection.commit()
     except Exception:
