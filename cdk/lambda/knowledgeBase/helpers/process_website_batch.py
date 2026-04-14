@@ -17,9 +17,7 @@ MAX_TOTAL_DATA_SOURCES = 5
 RESERVED_NON_WEB_DATA_SOURCES = 1
 MAX_WEB_DATA_SOURCES = MAX_TOTAL_DATA_SOURCES - RESERVED_NON_WEB_DATA_SOURCES
 WEBSITE_BATCH_SIZE = 5
-
-NEAR_CAPACITY_THRESHOLD = 0.85
-FULL_THRESHOLD = 0.95
+LOW_REMAINING_PAGES_THRESHOLD = 5000
 
 SYNCING_STATUSES = {"STARTING", "IN_PROGRESS", "STOPPING"}
 FAILED_STATUSES = {"FAILED"}
@@ -150,6 +148,8 @@ def _looks_like_capacity_failure(failure_reasons: list[str]) -> bool:
         "crawl limit",
         "exceeded",
         "too many pages",
+        "max capacity",
+        "capacity reached",
     ]
     return any(k in combined for k in keywords)
 
@@ -169,27 +169,16 @@ def _classify_data_source(data_source: dict, latest_job: dict | None) -> dict:
     status = latest_job.get("status") if latest_job else None
     failure_reasons = _latest_failure_reasons(latest_job)
 
+    remaining_pages = max(max_pages - scanned, 0)
+
     if status in SYNCING_STATUSES:
         state = "syncing"
-    elif status in FAILED_STATUSES:
-        state = "full" if _looks_like_capacity_failure(failure_reasons) else "error"
-    elif status in SUCCESS_STATUSES:
-        ratio = (scanned / max_pages) if max_pages else 0
-        if ratio >= FULL_THRESHOLD:
-            state = "full"
-        elif ratio >= NEAR_CAPACITY_THRESHOLD:
-            state = "near_capacity"
-        else:
-            state = "available"
+    elif status in FAILED_STATUSES and _looks_like_capacity_failure(failure_reasons):
+        state = "full"
+    elif scanned >= max_pages:
+        state = "full"
     else:
-        # no ingestion history yet or unknown state
-        ratio = (scanned / max_pages) if max_pages else 0
-        if ratio >= FULL_THRESHOLD:
-            state = "full"
-        elif ratio >= NEAR_CAPACITY_THRESHOLD:
-            state = "near_capacity"
-        else:
-            state = "available"
+        state = "available"
 
     return {
         "data_source_id": data_source_id,
@@ -198,7 +187,7 @@ def _classify_data_source(data_source: dict, latest_job: dict | None) -> dict:
         "seed_urls": seed_urls,
         "max_pages": max_pages,
         "documents_scanned": scanned,
-        "headroom_ratio": 1 - ((scanned / max_pages) if max_pages else 0),
+        "remaining_pages": remaining_pages,
         "latest_ingestion_job": latest_job,
         "failure_reasons": failure_reasons,
         "data_source": data_source,
@@ -210,8 +199,8 @@ def _select_best_available(classified: list[dict]) -> dict | None:
     if not candidates:
         return None
 
-    # prefer the crawler with the most headroom
-    return sorted(candidates, key=lambda x: x["headroom_ratio"], reverse=True)[0]
+    # prefer the crawler with the most remaining pages
+    return sorted(candidates, key=lambda x: x["remaining_pages"], reverse=True)[0]
 
 
 def _latest_run_rows_by_status(connection, *, status: str, data_source_type: str) -> list[dict]:
@@ -276,7 +265,7 @@ def _group_key_for_website_run(run: dict) -> str:
     )
 
 
-def _next_queued_website_batch(connection) -> list[dict]:
+def _next_queued_website_batch(connection, batch_size: int) -> list[dict]:
     queued_websites = _latest_run_rows_by_status(
         connection,
         status="queued",
@@ -292,7 +281,7 @@ def _next_queued_website_batch(connection) -> list[dict]:
     for run in queued_websites:
         if _group_key_for_website_run(run) == group_key:
             batch.append(run)
-        if len(batch) >= WEBSITE_BATCH_SIZE:
+        if len(batch) >= batch_size:
             break
 
     return batch
@@ -524,19 +513,6 @@ def _mark_runs_running(
 
 
 def process_website_batch(event, connection, kb_id, sync_session_id: str, triggered_by_scheduler: bool = False):
-    batch = _next_queued_website_batch(connection)
-    if not batch:
-        return {
-            "started": False,
-            "phase": "website",
-            "message": "No queued website runs found.",
-        }
-
-    urls = [x["name"] for x in batch]
-    include_patterns = batch[0]["include_patterns"] or []
-    exclude_patterns = batch[0]["exclude_patterns"] or []
-    ingestion_run_ids = [x["ingestion_run_id"] for x in batch]
-
     all_data_sources = _list_all_data_sources(kb_id)
 
     web_crawlers = []
@@ -558,6 +534,27 @@ def process_website_batch(event, connection, kb_id, sync_session_id: str, trigge
         classified.append(_classify_data_source(data_source, latest_job))
 
     selected = _select_best_available(classified)
+
+    if selected:
+        if selected["remaining_pages"] <= LOW_REMAINING_PAGES_THRESHOLD:
+            batch_size = 1
+        else:
+            batch_size = WEBSITE_BATCH_SIZE
+    else:
+        batch_size = WEBSITE_BATCH_SIZE
+
+    batch = _next_queued_website_batch(connection, batch_size=batch_size)
+    if not batch:
+        return {
+            "started": False,
+            "phase": "website",
+            "message": "No queued website runs found.",
+        }
+
+    urls = [x["name"] for x in batch]
+    include_patterns = batch[0]["include_patterns"] or []
+    exclude_patterns = batch[0]["exclude_patterns"] or []
+    ingestion_run_ids = [x["ingestion_run_id"] for x in batch]
 
     if selected:
         target_data_source = _update_existing_web_data_source(
@@ -611,6 +608,8 @@ def process_website_batch(event, connection, kb_id, sync_session_id: str, trigge
         "triggered_by_scheduler": triggered_by_scheduler,
         "sync_session_id": sync_session_id,
         "queued_count": len(batch),
+        "batch_size_used": batch_size,
+        "remaining_pages_before_sync": selected["remaining_pages"] if selected else None,
         "action": action,
         "bedrock_data_source_id": target_data_source["dataSourceId"],
         "bedrock_data_source_name": target_data_source["name"],
