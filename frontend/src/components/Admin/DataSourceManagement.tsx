@@ -1074,60 +1074,178 @@ export default function DataSourceManagement() {
                     const isOpen = !!expanded[ds.id];
 
                     return (
-                      <TableRow key={ds.id} className={isOpen ? "bg-gray-50/50" : ""}>
-                        <TableCell className="align-top">
-                          <div className="flex items-start gap-2">
-                            {isExpandable ? (
-                              <button
-                                type="button"
-                                className="mt-0.5 text-xs rounded border border-gray-200 px-2 py-1 text-gray-600 hover:bg-gray-50"
-                                onClick={() =>
-                                  setExpanded((prev) => ({ ...prev, [ds.id]: !prev[ds.id] }))
-                                }
-                                title={isOpen ? "Hide details" : "Show details"}
-                              >
-                                {isOpen ? "Hide" : "Details"}
-                              </button>
-                            ) : (
-                              <span className="mt-0.5 text-xs rounded border border-gray-200 px-2 py-1 text-gray-400">
-                                —
-                              </span>
-                            )}
+                      <>
+                        <TableRow key={ds.id} className={isOpen ? "bg-gray-50/50" : ""}>
+                          <TableCell className="align-top">
+                            <div className="flex items-start gap-2">
+                              {isExpandable ? (
+                                <button
+                                  type="button"
+                                  className="mt-0.5 text-xs rounded border border-gray-200 px-2 py-1 text-gray-600 hover:bg-gray-50"
+                                  onClick={() =>
+                                    setExpanded((prev) => ({ ...prev, [ds.id]: !prev[ds.id] }))
+                                  }
+                                  title={isOpen ? "Hide details" : "Show details"}
+                                >
+                                  {isOpen ? "Hide" : "Details"}
+                                </button>
+                              ) : (
+                                <span className="mt-0.5 text-xs rounded border border-gray-200 px-2 py-1 text-gray-400">
+                                  —
+                                </span>
+                              )}
 
-                            <div className="min-w-0">
-                              <div className="font-medium text-gray-900 break-all">
-                                {ds.name}
+                              <div className="min-w-0">
+                                <div className="font-medium text-gray-900 break-all">
+                                  {ds.name}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </TableCell>
+                          </TableCell>
 
-                        <TableCell className="align-top">
-                          <Badge variant="secondary">{typeLabel(ds.type)}</Badge>
-                        </TableCell>
+                          <TableCell className="align-top">
+                            <Badge variant="secondary">{typeLabel(ds.type)}</Badge>
+                          </TableCell>
 
-                        <TableCell className="align-top">{statusBadge(status)}</TableCell>
+                          <TableCell className="align-top">{statusBadge(status)}</TableCell>
 
-                        <TableCell className="align-top text-sm text-gray-700">
-                          {formatDateTime(ds.created_at)}
-                        </TableCell>
+                          <TableCell className="align-top text-sm text-gray-700">
+                            {formatDateTime(ds.created_at)}
+                          </TableCell>
 
-                        <TableCell className="align-top text-sm text-gray-700">
-                          {formatDateTime(run?.completed_at ?? null)}
-                        </TableCell>
+                          <TableCell className="align-top text-sm text-gray-700">
+                            {formatDateTime(run?.completed_at ?? null)}
+                          </TableCell>
 
-                        <TableCell className="align-top text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-red-500"
-                            disabled
-                            title="Delete (mock)"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
+                          <TableCell className="align-top text-right">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-red-500"
+                              disabled
+                              title="Delete (mock)"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+
+                        {isOpen ? (
+                          <TableRow key={`${ds.id}-sub`}>
+                            <TableCell colSpan={6} className="bg-gray-50/70">
+                              {ds.type === "website" ? (
+                                <div className="space-y-3">
+                                  <div className="text-sm font-medium text-gray-800">
+                                    Crawl rules
+                                  </div>
+
+                                  {(ds.include_patterns?.length ?? 0) > 0 ? (
+                                    <div>
+                                      <div className="text-xs font-semibold text-gray-600 mb-1">
+                                        Include patterns
+                                      </div>
+                                      <div className="text-xs font-mono bg-white border border-gray-200 rounded p-3 overflow-auto">
+                                        {(ds.include_patterns ?? []).map((p, i) => (
+                                          <div key={i} className="break-all">
+                                            {p}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-gray-500">No include patterns.</div>
+                                  )}
+
+                                  {(ds.exclude_patterns?.length ?? 0) > 0 ? (
+                                    <div>
+                                      <div className="text-xs font-semibold text-gray-600 mb-1">
+                                        Exclude patterns
+                                      </div>
+                                      <div className="text-xs font-mono bg-white border border-gray-200 rounded p-3 overflow-auto">
+                                        {(ds.exclude_patterns ?? []).map((p, i) => (
+                                          <div key={i} className="break-all">
+                                            {p}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="text-xs text-gray-500">No exclude patterns.</div>
+                                  )}
+
+                                  {run?.error_message ? (
+                                    <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-3">
+                                      {run.error_message}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : ds.type === "csv" ? (
+                                (() => {
+                                  const json = jsonByCsvName.get(ds.name);
+                                  const jsonRun = json ? latestRunBySourceId.get(json.id) : undefined;
+                                  const jsonStatus = jsonRun?.status ?? "no_runs";
+
+                                  return (
+                                    <div className="space-y-5">
+                                      <div className="space-y-2">
+                                        <div className="text-sm font-medium text-gray-800">
+                                          Metadata JSON file
+                                        </div>
+
+                                        {json ? (
+                                          <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
+                                            <div className="grid grid-cols-[45%_10%_12%_16%_16%_8%] gap-0 text-sm items-start">
+                                              <div className="px-3 py-3 border-r border-gray-100 min-w-0">
+                                                <div className="font-medium text-gray-900 break-all">
+                                                  {json.name}
+                                                </div>
+                                              </div>
+
+                                              <div className="px-3 py-3 border-r border-gray-100">
+                                                <Badge variant="secondary">{typeLabel(json.type)}</Badge>
+                                              </div>
+
+                                              <div className="px-3 py-3 border-r border-gray-100">
+                                                {statusBadge(jsonStatus)}
+                                              </div>
+
+                                              <div className="px-3 py-3 border-r border-gray-100 text-xs text-gray-700">
+                                                {formatDateTime(json.created_at)}
+                                              </div>
+
+                                              <div className="px-3 py-3 border-r border-gray-100 text-xs text-gray-700">
+                                                {formatDateTime(jsonRun?.completed_at ?? null)}
+                                              </div>
+
+                                              <div className="px-3 py-3 text-right">
+                                                <Button
+                                                  variant="ghost"
+                                                  size="icon"
+                                                  className="h-8 w-8 text-red-500"
+                                                  disabled
+                                                  title="Delete (mock)"
+                                                >
+                                                  <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          <div className="text-xs text-gray-500">
+                                            No metadata JSON found for this CSV.
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })()
+                              ) : (
+                                <div className="text-xs text-gray-500">No details.</div>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </>
                     );
                   })
                 )}
@@ -1170,131 +1288,6 @@ export default function DataSourceManagement() {
             </div>
           )}
         </Card>
-
-        {!loading && filteredDataSources.length > 0 && (
-          <div className="space-y-3">
-            {pagedDataSources.map((ds) => {
-              const isOpen = !!expanded[ds.id];
-              if (!isOpen) return null;
-
-              const run = latestRunBySourceId.get(ds.id);
-
-              return (
-                <Card key={`${ds.id}-details`} className="border-gray-200 shadow-sm">
-                  <CardContent className="pt-4">
-                    {ds.type === "website" ? (
-                      <div className="space-y-3">
-                        <div className="text-sm font-medium text-gray-800">
-                          Crawl rules
-                        </div>
-
-                        {(ds.include_patterns?.length ?? 0) > 0 ? (
-                          <div>
-                            <div className="text-xs font-semibold text-gray-600 mb-1">
-                              Include patterns
-                            </div>
-                            <div className="text-xs font-mono bg-white border border-gray-200 rounded p-3 overflow-auto">
-                              {(ds.include_patterns ?? []).map((p, i) => (
-                                <div key={i} className="break-all">
-                                  {p}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-xs text-gray-500">No include patterns.</div>
-                        )}
-
-                        {(ds.exclude_patterns?.length ?? 0) > 0 ? (
-                          <div>
-                            <div className="text-xs font-semibold text-gray-600 mb-1">
-                              Exclude patterns
-                            </div>
-                            <div className="text-xs font-mono bg-white border border-gray-200 rounded p-3 overflow-auto">
-                              {(ds.exclude_patterns ?? []).map((p, i) => (
-                                <div key={i} className="break-all">
-                                  {p}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-xs text-gray-500">No exclude patterns.</div>
-                        )}
-
-                        {run?.error_message ? (
-                          <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-3">
-                            {run.error_message}
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : ds.type === "csv" ? (
-                      (() => {
-                        const json = jsonByCsvName.get(ds.name);
-                        const jsonRun = json ? latestRunBySourceId.get(json.id) : undefined;
-                        const jsonStatus = jsonRun?.status ?? "no_runs";
-
-                        return (
-                          <div className="space-y-5">
-                            <div className="space-y-2">
-                              <div className="text-sm font-medium text-gray-800">
-                                Metadata JSON file
-                              </div>
-
-                              {json ? (
-                                <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                                  <div className="grid grid-cols-12 gap-2 px-3 py-3 text-sm items-start">
-                                    <div className="col-span-6 min-w-0">
-                                      <div className="text-gray-900 break-all font-medium">
-                                        {json.name}
-                                      </div>
-                                    </div>
-
-                                    <div className="col-span-1">
-                                      <Badge variant="secondary">{typeLabel(json.type)}</Badge>
-                                    </div>
-
-                                    <div className="col-span-2">{statusBadge(jsonStatus)}</div>
-
-                                    <div className="col-span-2 text-xs text-gray-700">
-                                      {formatDateTime(json.created_at)}
-                                    </div>
-
-                                    <div className="col-span-1 text-xs text-gray-700">
-                                      {formatDateTime(jsonRun?.completed_at ?? null)}
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="text-xs text-gray-500">
-                                  No metadata JSON found for this CSV.
-                                </div>
-                              )}
-                            </div>
-
-                            {run?.error_message ? (
-                              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-3">
-                                CSV: {run.error_message}
-                              </div>
-                            ) : null}
-
-                            {jsonRun?.error_message ? (
-                              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-3">
-                                Metadata JSON: {jsonRun.error_message}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })()
-                    ) : (
-                      <div className="text-xs text-gray-500">No details.</div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
       </div>
     </div>
   );
