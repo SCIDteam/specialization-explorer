@@ -5,8 +5,8 @@ import boto3
 import logging
 import psycopg2
 
-from helpers.process_website_batch import add_website
-from helpers.process_s3_batch import add_csv
+from helpers.stage_data_sources import stage_data_sources
+from helpers.start_ingestion_job import start_ingestion_job
 from helpers.generate_presigned_url import generate_presigned_url
 from helpers.update_status import update_status
 
@@ -108,7 +108,7 @@ def handler(event, context=None):
                 connection = _connect_to_db()
             except Exception as e:
                 logger.error(f"Error connecting to database: {e}")
-                return _response(500, {"error": "Error connecting to database"})
+                return _response(event, 500, {"error": "Error connecting to database"})
 
             return update_status(event=event, connection=connection)
 
@@ -136,26 +136,31 @@ def handler(event, context=None):
             logger.error(f"Error connecting to database: {e}")
             return _response(event, 500, {"error": "Error connecting to database"})
 
-        # get knowledge base ID
+        # Route: POST /admin/data_sources
+        if method == "POST" and (
+            resource == "/admin/data_sources"
+            or path.endswith("/admin/data_sources")
+        ):
+            return stage_data_sources(event=event, body=body, connection=connection)
+
+        # Everything below this point needs KB ID
         try:
             kb_id = _get_secret(KB_SECRET_NAME, expect_json=False)
         except Exception as e:
             logger.error(f"Error getting knowledge base ID: {e}")
             return _response(event, 500, {"error": "Error getting knowledge base ID"})
 
-        # Route: POST /admin/data_sources/website
+        # Route: POST /admin/data_sources/sync
         if method == "POST" and (
-            resource == "/admin/data_sources/website"
-            or path.endswith("/admin/data_sources/website")
+            resource == "/admin/data_sources/sync"
+            or path.endswith("/admin/data_sources/sync")
         ):
-            return add_website(event=event, body=body, connection=connection, kb_id=kb_id)
-
-        # Route: POST /admin/data_sources/csv
-        if method == "POST" and (
-            resource == "/admin/data_sources/csv"
-            or path.endswith("/admin/data_sources/csv")
-        ):
-            return add_csv(event=event, body=body, connection=connection, kb_id=kb_id)
+            return start_ingestion_job(
+                event=event,
+                body=body,
+                connection=connection,
+                kb_id=kb_id,
+            )
 
         return _response(
             event,
