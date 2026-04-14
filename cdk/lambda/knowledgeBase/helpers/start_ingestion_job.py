@@ -14,6 +14,7 @@ REGION = os.environ["REGION"]
 
 
 def _response(event, status_code: int, body: dict):
+    """Build a standard API Gateway JSON response with CORS headers"""
     return {
         "statusCode": status_code,
         "headers": {
@@ -25,6 +26,7 @@ def _response(event, status_code: int, body: dict):
 
 
 def _get_user_id_by_email(connection, email: str) -> str | None:
+    """Look up the internal user ID for the admin email that initiated the sync"""
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -40,6 +42,12 @@ def _get_user_id_by_email(connection, email: str) -> str | None:
 
 
 def _promote_pending_to_queued(connection, *, sync_session_id: str) -> int:
+    """
+    Promote the latest pending ingestion run for each data source to queued.
+    This is the first step of a sync session. It marks staged work as officially
+    selected for ingestion and stamps the runs with the sync_session_id so the
+    rest of the workflow can track them as part of the same sync.
+    """
     with connection.cursor() as cursor:
         cursor.execute(
             """
@@ -68,6 +76,21 @@ def _promote_pending_to_queued(connection, *, sync_session_id: str) -> int:
 
 
 def start_ingestion_job(event, body, connection, kb_id):
+    """
+    Start a new sync session for staged data sources.
+
+    This method:
+    - validates the requesting admin
+    - creates a new sync_session_id
+    - promotes pending ingestion runs to queued
+    - attempts to start the S3 batch first
+    - if no S3 batch is eligible, attempts to start the website batch
+    - returns the first phase that was successfully started
+
+    The actual ingestion work is delegated to:
+    - process_s3_batch(...)
+    - process_website_batch(...)
+    """
     created_by = body.get("created_by")
     if not created_by:
         return _response(event, 400, {"error": "Missing created_by"})
