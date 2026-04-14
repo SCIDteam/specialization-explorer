@@ -16,6 +16,7 @@ SCHEDULER_TARGET_ARN = os.environ["SCHEDULER_TARGET_ARN"]
 MAX_TOTAL_DATA_SOURCES = 5
 RESERVED_NON_WEB_DATA_SOURCES = 1
 MAX_WEB_DATA_SOURCES = MAX_TOTAL_DATA_SOURCES - RESERVED_NON_WEB_DATA_SOURCES
+WEBSITE_BATCH_SIZE = 5
 
 NEAR_CAPACITY_THRESHOLD = 0.85
 FULL_THRESHOLD = 0.95
@@ -209,29 +210,106 @@ def _select_best_available(classified: list[dict]) -> dict | None:
     if not candidates:
         return None
 
-    # prefer the crawler with the most headroom.
+    # prefer the crawler with the most headroom
     return sorted(candidates, key=lambda x: x["headroom_ratio"], reverse=True)[0]
 
 
-def _all_web_crawlers_syncing(classified: list[dict]) -> bool:
-    if not classified:
-        return False
-    return all(x["state"] == "syncing" for x in classified)
+def _latest_run_rows_by_status(connection, *, status: str, data_source_type: str) -> list[dict]:
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            WITH latest_runs AS (
+                SELECT
+                    ir.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY ir.data_source_id
+                        ORDER BY ir.created_at DESC, ir.id DESC
+                    ) AS rn
+                FROM ingestion_runs ir
+            )
+            SELECT
+                lr.id,
+                lr.data_source_id,
+                lr.status,
+                lr.metadata,
+                ds.name,
+                ds.type,
+                ds.include_patterns,
+                ds.exclude_patterns,
+                ds.metadata
+            FROM latest_runs lr
+            JOIN data_sources ds ON ds.id = lr.data_source_id
+            WHERE lr.rn = 1
+              AND lr.status = %s::ingestion_status
+              AND ds.type = %s::data_source_type
+            ORDER BY ds.created_at ASC, ds.id ASC
+            """,
+            (status, data_source_type),
+        )
+
+        rows = cursor.fetchall()
+        results = []
+        for row in rows:
+            results.append(
+                {
+                    "ingestion_run_id": str(row[0]),
+                    "data_source_id": str(row[1]),
+                    "status": row[2],
+                    "ingestion_metadata": row[3] or {},
+                    "name": row[4],
+                    "type": row[5],
+                    "include_patterns": row[6] or [],
+                    "exclude_patterns": row[7] or [],
+                    "data_source_metadata": row[8] or {},
+                }
+            )
+        return results
 
 
-def _build_updated_web_config(data_source: dict, new_url: str, include_patterns: list[str], exclude_patterns: list[str]) -> dict:
+def _group_key_for_website_run(run: dict) -> str:
+    return json.dumps(
+        {
+            "include_patterns": run["include_patterns"] or [],
+            "exclude_patterns": run["exclude_patterns"] or [],
+        },
+        sort_keys=True,
+    )
+
+
+def _next_queued_website_batch(connection) -> list[dict]:
+    queued_websites = _latest_run_rows_by_status(
+        connection,
+        status="queued",
+        data_source_type="website",
+    )
+    if not queued_websites:
+        return []
+
+    first = queued_websites[0]
+    group_key = _group_key_for_website_run(first)
+
+    batch = []
+    for run in queued_websites:
+        if _group_key_for_website_run(run) == group_key:
+            batch.append(run)
+        if len(batch) >= WEBSITE_BATCH_SIZE:
+            break
+
+    return batch
+
+
+def _build_updated_web_config(data_source: dict, new_urls: list[str], include_patterns: list[str], exclude_patterns: list[str]) -> dict:
     config = data_source["dataSourceConfiguration"]
     web_config = config["webConfiguration"]
     crawler_config = web_config["crawlerConfiguration"]
     source_config = web_config["sourceConfiguration"]
 
-    existing_seed_urls = (
-        source_config.get("urlConfiguration", {}).get("seedUrls", [])
-    )
+    existing_seed_urls = source_config.get("urlConfiguration", {}).get("seedUrls", [])
     existing_urls = [x["url"] for x in existing_seed_urls if "url" in x]
 
-    if new_url not in existing_urls:
-        existing_seed_urls.append({"url": new_url})
+    for new_url in new_urls:
+        if new_url not in existing_urls:
+            existing_seed_urls.append({"url": new_url})
 
     updated_crawler_config = dict(crawler_config)
 
@@ -271,10 +349,10 @@ def _build_updated_web_config(data_source: dict, new_url: str, include_patterns:
     }
 
 
-def _update_existing_web_data_source(data_source: dict, knowledge_base_id: str, new_url: str, include_patterns: list[str], exclude_patterns: list[str]) -> dict:
+def _update_existing_web_data_source(data_source: dict, knowledge_base_id: str, new_urls: list[str], include_patterns: list[str], exclude_patterns: list[str]) -> dict:
     updated_data_source_config = _build_updated_web_config(
         data_source=data_source,
-        new_url=new_url,
+        new_urls=new_urls,
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,
     )
@@ -306,7 +384,7 @@ def _update_existing_web_data_source(data_source: dict, knowledge_base_id: str, 
     return resp["dataSource"]
 
 
-def _build_new_web_data_source_payload(template_data_source: dict, new_url: str, include_patterns: list[str], exclude_patterns: list[str]) -> dict:
+def _build_new_web_data_source_payload(template_data_source: dict, new_urls: list[str], include_patterns: list[str], exclude_patterns: list[str]) -> dict:
     template_config = template_data_source["dataSourceConfiguration"]
     template_web = template_config["webConfiguration"]
     template_crawler = template_web["crawlerConfiguration"]
@@ -340,7 +418,7 @@ def _build_new_web_data_source_payload(template_data_source: dict, new_url: str,
                 "crawlerConfiguration": crawler_config,
                 "sourceConfiguration": {
                     "urlConfiguration": {
-                        "seedUrls": [{"url": new_url}]
+                        "seedUrls": [{"url": url} for url in new_urls]
                     }
                 },
             },
@@ -349,10 +427,10 @@ def _build_new_web_data_source_payload(template_data_source: dict, new_url: str,
     }
 
 
-def _create_new_web_data_source(template_data_source: dict, knowledge_base_id: str, new_url: str, include_patterns: list[str], exclude_patterns: list[str]) -> dict:
+def _create_new_web_data_source(template_data_source: dict, knowledge_base_id: str, new_urls: list[str], include_patterns: list[str], exclude_patterns: list[str]) -> dict:
     payload = _build_new_web_data_source_payload(
         template_data_source=template_data_source,
-        new_url=new_url,
+        new_urls=new_urls,
         include_patterns=include_patterns,
         exclude_patterns=exclude_patterns,
     )
@@ -362,7 +440,7 @@ def _create_new_web_data_source(template_data_source: dict, knowledge_base_id: s
         name=payload["name"],
         dataSourceConfiguration=payload["dataSourceConfiguration"],
         vectorIngestionConfiguration=payload["vectorIngestionConfiguration"],
-        description=f"Auto-created web crawler for {new_url}",
+        description=f"Auto-created web crawler for {', '.join(new_urls[:2])}",
     )
     return resp["dataSource"]
 
@@ -371,143 +449,29 @@ def _start_ingestion(knowledge_base_id: str, data_source_id: str) -> dict:
     resp = bedrock_agent.start_ingestion_job(
         knowledgeBaseId=knowledge_base_id,
         dataSourceId=data_source_id,
-        description="Triggered by admin Add Web URL",
+        description="Triggered by queued website batch sync",
     )
     return resp["ingestionJob"]
 
-def _get_user_id_by_email(connection, email: str) -> str | None:
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT id
-            FROM users
-            WHERE email = %s
-            LIMIT 1
-            """,
-            (email,),
-        )
-        row = cursor.fetchone()
-        return str(row[0]) if row else None
-
-
-def _upsert_data_source_row(
-    connection,
-    *,
-    bedrock_data_source_id: str,
-    name: str,
-    data_source_type: str,
-    include_patterns: list[str],
-    exclude_patterns: list[str],
-    created_by_user_id: str,
-    metadata: dict,
-) -> str:
-    with connection.cursor() as cursor:
-        # try to find existing website URL
-        cursor.execute(
-            """
-            SELECT id
-            FROM data_sources
-            WHERE metadata->>'bedrock_data_source_id' = %s
-            LIMIT 1
-            """,
-            (bedrock_data_source_id,),
-        )
-        existing = cursor.fetchone()
-
-        if existing:
-            data_source_row_id = str(existing[0])
-            cursor.execute(
-                """
-                UPDATE data_sources
-                SET
-                    name = %s,
-                    type = %s::data_source_type,
-                    include_patterns = %s,
-                    exclude_patterns = %s,
-                    metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
-                WHERE id = %s::uuid
-                """,
-                (
-                    name,
-                    data_source_type,
-                    include_patterns if include_patterns else None,
-                    exclude_patterns if exclude_patterns else None,
-                    json.dumps(metadata),
-                    data_source_row_id,
-                ),
-            )
-            return data_source_row_id
-
-        cursor.execute(
-            """
-            INSERT INTO data_sources (
-                name,
-                type,
-                include_patterns,
-                exclude_patterns,
-                created_by,
-                metadata
-            )
-            VALUES (%s, %s::data_source_type, %s, %s, %s::uuid, %s::jsonb)
-            RETURNING id
-            """,
-            (
-                name,
-                data_source_type,
-                include_patterns if include_patterns else None,
-                exclude_patterns if exclude_patterns else None,
-                created_by_user_id,
-                json.dumps(metadata),
-            ),
-        )
-        inserted = cursor.fetchone()
-        return str(inserted[0])
-
-
-def _insert_ingestion_run_row(
-    connection,
-    *,
-    data_source_row_id: str,
-    bedrock_ingestion_job_id: str,
-) -> str:
-    with connection.cursor() as cursor:
-        cursor.execute(
-            """
-            INSERT INTO ingestion_runs (
-                data_source_id,
-                status,
-                error_message,
-                metadata
-            )
-            VALUES (%s::uuid, %s::ingestion_status, NULL, %s::jsonb)
-            RETURNING id
-            """,
-            (
-                data_source_row_id,
-                "running",
-                json.dumps({
-                    "bedrock_ingestion_job_id": bedrock_ingestion_job_id
-                }),
-            ),
-        )
-        row = cursor.fetchone()
-        return str(row[0])
 
 def _create_ingestion_polling_schedule(
     *,
     knowledge_base_id: str,
     bedrock_data_source_id: str,
     bedrock_ingestion_job_id: str,
-    db_ingestion_run_id: str,
+    db_ingestion_run_ids: list[str],
+    sync_session_id: str,
 ) -> str:
-    schedule_name = f"kb-ingestion-{db_ingestion_run_id}"
+    schedule_name = f"kb-web-{sync_session_id}-{uuid4().hex[:8]}"
 
     payload = {
         "task": "poll_ingestion_run",
+        "phase": "website",
         "knowledge_base_id": knowledge_base_id,
         "bedrock_data_source_id": bedrock_data_source_id,
         "bedrock_ingestion_job_id": bedrock_ingestion_job_id,
-        "db_ingestion_run_id": db_ingestion_run_id,
+        "db_ingestion_run_ids": db_ingestion_run_ids,
+        "sync_session_id": sync_session_id,
         "schedule_name": schedule_name,
     }
 
@@ -522,264 +486,136 @@ def _create_ingestion_polling_schedule(
             "RoleArn": SCHEDULER_ROLE_ARN,
             "Input": json.dumps(payload),
         },
-        Description=f"Poll Bedrock ingestion job {bedrock_ingestion_job_id} for run {db_ingestion_run_id}",
+        Description=f"Poll website ingestion job {bedrock_ingestion_job_id} for sync session {sync_session_id}",
     )
 
     return schedule_name
 
-def _update_ingestion_run_schedule_name(connection, *, ingestion_run_row_id: str, schedule_name: str):
+
+def _mark_runs_running(
+    connection,
+    *,
+    ingestion_run_ids: list[str],
+    bedrock_ingestion_job_id: str,
+    sync_session_id: str,
+    schedule_name: str,
+):
     with connection.cursor() as cursor:
         cursor.execute(
             """
             UPDATE ingestion_runs
-            SET metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
-            WHERE id = %s::uuid
+            SET
+                status = 'running'::ingestion_status,
+                metadata = COALESCE(metadata, '{}'::jsonb) || %s::jsonb
+            WHERE id = ANY(%s::uuid[])
             """,
             (
-                json.dumps({"scheduler_name": schedule_name}),
-                ingestion_run_row_id,
+                json.dumps(
+                    {
+                        "phase": "website",
+                        "sync_session_id": sync_session_id,
+                        "bedrock_ingestion_job_id": bedrock_ingestion_job_id,
+                        "schedule_name": schedule_name,
+                    }
+                ),
+                ingestion_run_ids,
             ),
         )
 
-def add_website(event, body, connection, kb_id):
-    name = body.get("name")
-    include_patterns = body.get("include_patterns", [])
-    exclude_patterns = body.get("exclude_patterns", [])
-    created_by = body.get("created_by")
 
-    if not name:
-        return _response(event, 400, {"error": "Missing name of the website"})
+def process_website_batch(event, connection, kb_id, sync_session_id: str, triggered_by_scheduler: bool = False):
+    batch = _next_queued_website_batch(connection)
+    if not batch:
+        return {
+            "started": False,
+            "phase": "website",
+            "message": "No queued website runs found.",
+        }
 
-    if not created_by:
-        return _response(event, 400, {"error": "Missing admin who is trying to add this website to knowledge base"})
+    urls = [x["name"] for x in batch]
+    include_patterns = batch[0]["include_patterns"] or []
+    exclude_patterns = batch[0]["exclude_patterns"] or []
+    ingestion_run_ids = [x["ingestion_run_id"] for x in batch]
 
-    if not isinstance(include_patterns, list):
-        return _response(event, 400, {"error": "include_patterns must be an array"})
+    all_data_sources = _list_all_data_sources(kb_id)
 
-    if not isinstance(exclude_patterns, list):
-        return _response(event, 400, {"error": "exclude_patterns must be an array"})
+    web_crawlers = []
+    for summary in all_data_sources:
+        data_source = _get_data_source(kb_id, summary["dataSourceId"])
+        if _is_web_data_source(data_source):
+            web_crawlers.append(data_source)
 
-    logger.info(
-        "Received add website request: name=%s include_patterns=%s exclude_patterns=%s created_by=%s",
-        name,
-        include_patterns,
-        exclude_patterns,
-        created_by,
+    if not web_crawlers:
+        return {
+            "started": False,
+            "phase": "website",
+            "error": "No existing web crawler template found.",
+        }
+
+    classified = []
+    for data_source in web_crawlers:
+        latest_job = _get_latest_ingestion_job(kb_id, data_source["dataSourceId"])
+        classified.append(_classify_data_source(data_source, latest_job))
+
+    selected = _select_best_available(classified)
+
+    if selected:
+        target_data_source = _update_existing_web_data_source(
+            data_source=selected["data_source"],
+            knowledge_base_id=kb_id,
+            new_urls=urls,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+        )
+        action = "updated_existing_web_data_source"
+    else:
+        if len(web_crawlers) >= MAX_WEB_DATA_SOURCES:
+            return {
+                "started": False,
+                "phase": "website",
+                "error": "No available web crawler capacity for queued websites.",
+            }
+
+        template_data_source = web_crawlers[0]
+        target_data_source = _create_new_web_data_source(
+            template_data_source=template_data_source,
+            knowledge_base_id=kb_id,
+            new_urls=urls,
+            include_patterns=include_patterns,
+            exclude_patterns=exclude_patterns,
+        )
+        action = "created_new_web_data_source"
+
+    ingestion_job = _start_ingestion(kb_id, target_data_source["dataSourceId"])
+
+    schedule_name = _create_ingestion_polling_schedule(
+        knowledge_base_id=kb_id,
+        bedrock_data_source_id=target_data_source["dataSourceId"],
+        bedrock_ingestion_job_id=ingestion_job["ingestionJobId"],
+        db_ingestion_run_ids=ingestion_run_ids,
+        sync_session_id=sync_session_id,
     )
 
-    try:
-        all_data_sources = _list_all_data_sources(kb_id)
+    _mark_runs_running(
+        connection,
+        ingestion_run_ids=ingestion_run_ids,
+        bedrock_ingestion_job_id=ingestion_job["ingestionJobId"],
+        sync_session_id=sync_session_id,
+        schedule_name=schedule_name,
+    )
+    connection.commit()
 
-        web_crawlers = []
-        for summary in all_data_sources:
-            data_source_id = summary["dataSourceId"]
-            data_source = _get_data_source(kb_id, data_source_id)
-            if _is_web_data_source(data_source):
-                web_crawlers.append(data_source)
-
-        classified = []
-        for data_source in web_crawlers:
-            latest_job = _get_latest_ingestion_job(kb_id, data_source["dataSourceId"])
-            classified.append(_classify_data_source(data_source, latest_job))
-
-        # prevent duplicates across all web crawler seed URLs
-        for item in classified:
-            if name in item["seed_urls"]:
-                return _response(
-                    event,
-                    200,
-                    {
-                        "message": "URL already exists in a web crawler data source.",
-                        "name": name,
-                        "created_by": created_by,
-                        "data_source_id": item["data_source_id"],
-                        "state": item["state"],
-                    },
-                )
-
-        selected = _select_best_available(classified)
-
-        if selected:
-            updated_data_source = _update_existing_web_data_source(
-                data_source=selected["data_source"],
-                knowledge_base_id=kb_id,
-                new_url=name,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-            )
-            ingestion_job = _start_ingestion(kb_id, updated_data_source["dataSourceId"])
-
-            created_by_user_id = _get_user_id_by_email(connection, created_by)
-            if not created_by_user_id:
-                return _response(event, 400, {"error": "Admin user not found in database"})
-
-            try:
-                db_metadata = {
-                    "bedrock_data_source_id": updated_data_source["dataSourceId"],
-                    "bedrock_data_source_name": updated_data_source["name"],
-                    "seed_url": name,
-                    "source": "bedrock_web_crawler",
-                    "action": "updated_existing_data_source",
-                }
-
-                data_source_row_id = _upsert_data_source_row(
-                    connection,
-                    bedrock_data_source_id=updated_data_source["dataSourceId"],
-                    name=name,
-                    data_source_type="website",
-                    include_patterns=include_patterns,
-                    exclude_patterns=exclude_patterns,
-                    created_by_user_id=created_by_user_id,
-                    metadata=db_metadata,
-                )
-
-                ingestion_run_row_id = _insert_ingestion_run_row(
-                    connection,
-                    data_source_row_id=data_source_row_id,
-                    bedrock_ingestion_job_id=ingestion_job["ingestionJobId"],
-                )
-
-                connection.commit()
-
-                schedule_name = _create_ingestion_polling_schedule(
-                    knowledge_base_id=kb_id,
-                    bedrock_data_source_id=updated_data_source["dataSourceId"],
-                    bedrock_ingestion_job_id=ingestion_job["ingestionJobId"],
-                    db_ingestion_run_id=ingestion_run_row_id,
-                )
-
-                _update_ingestion_run_schedule_name(
-                    connection=connection,
-                    ingestion_run_row_id=ingestion_run_row_id,
-                    schedule_name=schedule_name
-                )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-
-            return _response(
-                event,
-                200,
-                {
-                    "message": "Website URL added to existing web crawler data source and ingestion started.",
-                    "action": "updated_existing_data_source",
-                    "name": name,
-                    "created_by": created_by,
-                    "data_source_id": updated_data_source["dataSourceId"],
-                    "data_source_name": updated_data_source["name"],
-                    "ingestion_job_id": ingestion_job["ingestionJobId"],
-                    "db_data_source_id": data_source_row_id,
-                    "db_ingestion_run_id": ingestion_run_row_id,
-                    "schedule_name": schedule_name,
-                },
-            )
-
-        web_count = len(web_crawlers)
-
-        if web_count < MAX_WEB_DATA_SOURCES:
-            if not web_crawlers:
-                return _response(
-                    event,
-                    500,
-                    {
-                        "error": "No existing web crawler template found. At least one web crawler data source must already exist."
-                    },
-                )
-
-            template_data_source = web_crawlers[0]
-            created_data_source = _create_new_web_data_source(
-                template_data_source=template_data_source,
-                knowledge_base_id=kb_id,
-                new_url=name,
-                include_patterns=include_patterns,
-                exclude_patterns=exclude_patterns,
-            )
-            ingestion_job = _start_ingestion(kb_id, created_data_source["dataSourceId"])
-
-            created_by_user_id = _get_user_id_by_email(connection, created_by)
-            if not created_by_user_id:
-                return _response(event, 400, {"error": "Admin user not found in database"})
-
-            try:
-                db_metadata = {
-                    "bedrock_data_source_id": created_data_source["dataSourceId"],
-                    "bedrock_data_source_name": created_data_source["name"],
-                    "seed_url": name,
-                    "source": "bedrock_web_crawler",
-                    "action": "created_new_data_source",
-                }
-
-                data_source_row_id = _upsert_data_source_row(
-                    connection,
-                    bedrock_data_source_id=created_data_source["dataSourceId"],
-                    name=name,
-                    data_source_type="website",
-                    include_patterns=include_patterns,
-                    exclude_patterns=exclude_patterns,
-                    created_by_user_id=created_by_user_id,
-                    metadata=db_metadata,
-                )
-
-                ingestion_run_row_id = _insert_ingestion_run_row(
-                    connection,
-                    data_source_row_id=data_source_row_id,
-                    bedrock_ingestion_job_id=ingestion_job["ingestionJobId"],
-                )
-
-                connection.commit()
-
-                schedule_name = _create_ingestion_polling_schedule(
-                    knowledge_base_id=kb_id,
-                    bedrock_data_source_id=created_data_source["dataSourceId"],
-                    bedrock_ingestion_job_id=ingestion_job["ingestionJobId"],
-                    db_ingestion_run_id=ingestion_run_row_id,
-                )
-
-                _update_ingestion_run_schedule_name(
-                    connection=connection,
-                    ingestion_run_row_id=ingestion_run_row_id,
-                    schedule_name=schedule_name
-                )
-                connection.commit()
-            except Exception:
-                connection.rollback()
-                raise
-
-            return _response(
-                event,
-                200,
-                {
-                    "message": "Website URL added by creating a new web crawler data source and starting ingestion.",
-                    "action": "created_new_data_source",
-                    "name": name,
-                    "created_by": created_by,
-                    "data_source_id": created_data_source["dataSourceId"],
-                    "data_source_name": created_data_source["name"],
-                    "ingestion_job_id": ingestion_job["ingestionJobId"],
-                    "db_data_source_id": data_source_row_id,
-                    "db_ingestion_run_id": ingestion_run_row_id,
-                    "schedule_name": schedule_name,
-                },
-            )
-
-        if _all_web_crawlers_syncing(classified):
-            return _response(
-                event,
-                409,
-                {
-                    "error": "All web crawler data sources are currently syncing. Please wait for current ingestions to finish before adding more URLs."
-                },
-            )
-
-        return _response(
-            event,
-            409,
-            {
-                "error": "The knowledge base is at capacity for website crawling. No additional web crawler data sources are available."
-            },
-        )
-
-    except Exception as e:
-        logger.error("Failed to add website URL to Bedrock knowledge base: %s", e, exc_info=True)
-        return _response(event, 500, {"error": "Failed to add website URL to knowledge base"})
+    return {
+        "started": True,
+        "phase": "website",
+        "triggered_by_scheduler": triggered_by_scheduler,
+        "sync_session_id": sync_session_id,
+        "queued_count": len(batch),
+        "action": action,
+        "bedrock_data_source_id": target_data_source["dataSourceId"],
+        "bedrock_data_source_name": target_data_source["name"],
+        "bedrock_ingestion_job_id": ingestion_job["ingestionJobId"],
+        "schedule_name": schedule_name,
+        "db_ingestion_run_ids": ingestion_run_ids,
+        "urls": urls,
+    }
