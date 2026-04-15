@@ -209,7 +209,7 @@ export class KnowledgeBaseStack extends Stack {
     // Vector Index Manager Lambda
     const vectorIndexManagerFn = new lambda.DockerImageFunction(this, "VectorIndexManagerFn", {
       role: vectorIndexManagerRole,
-      timeout: cdk.Duration.minutes(15),
+      timeout: cdk.Duration.minutes(2),
       memorySize: 512,
       functionName: `${props.stackPrefix}-KnowledgeBase-VectorIndexManagerFn`,
       code: lambda.DockerImageCode.fromEcr(props.vectorIndexManagerRepository, {
@@ -220,6 +220,9 @@ export class KnowledgeBaseStack extends Stack {
 
     const vectorIndexProvider = new Provider(this, "VectorIndexProvider", {
       onEventHandler: vectorIndexManagerFn,
+      isCompleteHandler: vectorIndexManagerFn,
+      queryInterval: cdk.Duration.seconds(30),
+      totalTimeout: cdk.Duration.minutes(30),
     });
 
     // OpenSearch Serverless data access policy
