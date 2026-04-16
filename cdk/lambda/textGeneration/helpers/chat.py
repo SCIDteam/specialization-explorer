@@ -15,11 +15,13 @@ from helpers.token_limits import check_limit, record_usage
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+logger.info(f"boto3 version: {boto3.__version__}")
+
 def _rewrite_query_for_retrieval(
     raw_query: str,
     chat_history: List[Dict[str, Any]],
     llm_region: str,
-    haiku_model_arn: str = config.HAIKU_ARN
+    haiku_model_arn: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
 ) -> str:
     """
     Uses a fast, low-cost LLM call to rewrite a conversational user query into a
@@ -116,7 +118,7 @@ def _prepare_conversation(
         raise
 
     # 4. Determine Phase & Prompt
-    current_system_prompt, num_retrieval_results, phase_name, model_arn = get_current_prompt(
+    static_system_prompt, num_retrieval_results, phase_name, phase_instructions, model_arn= get_current_prompt(
         chat_session_id,
         db_connection
     )
@@ -125,8 +127,7 @@ def _prepare_conversation(
     search_query = _rewrite_query_for_retrieval(
         raw_query=query,
         chat_history=raw_history,
-        llm_region=llm_region,
-        haiku_model_arn=config.HAIKU_ARN
+        llm_region=llm_region
     )
 
     # 6. RAG Retrieval (using rewritten query)
@@ -142,7 +143,7 @@ def _prepare_conversation(
     context_block = format_context_for_prompt(sources)
     
     # 8. Construct Final System Prompt
-    full_system_prompt = f"""{current_system_prompt}
+    dynamic_prompt = f"""{phase_instructions}
 
 <retrieved_context>
 {context_block}
@@ -174,7 +175,7 @@ After your answer, you MUST list the integer indices of the sources you actively
         "content": [{"text": query}]
     })
 
-    return bedrock_messages, full_system_prompt, sources, phase_name, model_arn
+    return bedrock_messages, static_system_prompt, phase_instructions, sources, phase_name, model_arn
 
 def _save_ai_response(
     db_connection,
@@ -235,7 +236,7 @@ def get_response(
                     "intervention": None
                 }
 
-        bedrock_messages, full_system_prompt, sources, phase_name, model_arn = _prepare_conversation(
+        bedrock_messages, static_system_prompt, phase_instructions, sources, phase_name, model_arn = _prepare_conversation(
             query,
             knowledge_base_id,
             region,
@@ -245,6 +246,7 @@ def get_response(
             db_connection,
             save_user_message=save_user_message
         )
+
     except ValueError as e:
         return {
             "response": str(e),
@@ -261,21 +263,21 @@ def get_response(
             "intervention": None,
         }
 
+    # Structure the system array with the cache point
     request_payload = {
             "modelId": model_arn,
             "messages": bedrock_messages,
-            "system": [{"text": full_system_prompt}],
+            "system": [
+                {"text": static_system_prompt},
+                {"cachePoint": {"type":"default"}},
+                {"text": phase_instructions}
+            ],
             "inferenceConfig": {
                 "maxTokens": config.MAX_TOKENS,
                 "temperature": config.TEMPERATURE
             }
         }
-    
-    if model_arn == config.SONNET_ARN:
-        request_payload["additionalModelRequestFields"] = {
-                "thinking": {"type": "disabled"},
-                "output_config": {"effort": "low"}
-            }
+
 
     bedrock_runtime = boto3.client("bedrock-runtime", region_name=llm_region)
     
@@ -330,6 +332,18 @@ def get_response(
                         yielded_text += new_text
                         if stream_callback and new_text:
                             stream_callback(new_text)
+
+            if "metadata" in event: 
+                usage = event["metadata"].get("usage", {})
+                cache_read = usage.get("cacheReadInputTokens", 0)
+                cache_write = usage.get("cacheWriteOutputTokens", 0)
+
+                if cache_read >0: 
+                    logger.info(f"Cache read: {cache_read} tokens")
+                elif cache_write > 0:
+                    logger.info(f"Cache write: {cache_write} tokens")
+                else: 
+                    logger.info("No cache interaction for this response")
 
         # Parse final answer text properly
         final_answer_match = re.search(r'<answer>(.*?)</answer>', full_response_text, re.DOTALL)

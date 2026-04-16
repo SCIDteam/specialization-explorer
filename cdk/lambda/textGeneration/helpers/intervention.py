@@ -272,7 +272,7 @@ def assess_response(
     answer_text: str,
     sources: List[Dict[str, Any]],
     llm_region: str,
-    verifier_model_id: str = config.HAIKU_ARN,
+    verifier_model_id: str = "us.anthropic.claude-haiku-4-5-20251001-v1:0",
 ) -> Dict[str, Any]:
     """
     LLM-only intervention scorer.
