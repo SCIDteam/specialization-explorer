@@ -269,7 +269,6 @@ def get_response(
             "messages": bedrock_messages,
             "system": [
                 {"text": static_system_prompt},
-                {"cachePoint": {"type":"default"}},
                 {"text": phase_instructions}
             ],
             "inferenceConfig": {
@@ -278,6 +277,11 @@ def get_response(
             }
         }
 
+    if model_arn == config.SONNET_ARN:
+        request_payload["additionalModelRequestFields"] = {
+            "thinking" : {"type": "disabled"},
+            "output_config": {"effort": "low"}
+        }
 
     bedrock_runtime = boto3.client("bedrock-runtime", region_name=llm_region)
     
@@ -332,18 +336,6 @@ def get_response(
                         yielded_text += new_text
                         if stream_callback and new_text:
                             stream_callback(new_text)
-
-            if "metadata" in event: 
-                usage = event["metadata"].get("usage", {})
-                cache_read = usage.get("cacheReadInputTokens", 0)
-                cache_write = usage.get("cacheWriteOutputTokens", 0)
-
-                if cache_read >0: 
-                    logger.info(f"Cache read: {cache_read} tokens")
-                elif cache_write > 0:
-                    logger.info(f"Cache write: {cache_write} tokens")
-                else: 
-                    logger.info("No cache interaction for this response")
 
         # Parse final answer text properly
         final_answer_match = re.search(r'<answer>(.*?)</answer>', full_response_text, re.DOTALL)
