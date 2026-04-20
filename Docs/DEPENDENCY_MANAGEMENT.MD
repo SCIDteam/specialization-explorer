@@ -6,14 +6,11 @@ This document explains how Python dependencies are locked and managed across Lam
 
 ## Lambda Functions with Locked Dependencies
 
-Only the `vectorIndexManagerSigV4` function uses locked dependencies via pip-tools. It is the only Lambda deployed as a Docker image built by CodePipeline, so exact version pinning is critical for reproducible builds.
+The `vectorIndexManagerSigV4` function is the only Lambda deployed as a Docker image built by CodePipeline, so exact version pinning is critical for reproducible builds.
 
-The `textGeneration` Lambda uses a minimal `requirements.txt` directly (no locking needed) because its heavier dependencies (`psycopg2`, `aws-lambda-powertools`) are provided via Lambda Layers rather than bundled into the function package.
-
-| Lambda Function           | Location                                  | Approach                        |
-| ------------------------- | ----------------------------------------- | ------------------------------- |
-| `vectorIndexManagerSigV4` | `cdk/lambda/vectorIndexManagerSigV4/`     | Locked via pip-tools (Docker)   |
-| `textGeneration`          | `cdk/lambda/textGeneration/`              | Minimal `requirements.txt` only |
+| Lambda Function           | Location                              | Approach                      |
+| ------------------------- | ------------------------------------- | ----------------------------- |
+| `vectorIndexManagerSigV4` | `cdk/lambda/vectorIndexManagerSigV4/` | Locked via pip-tools (Docker) |
 
 ## How Dependencies Were Locked
 
@@ -143,13 +140,4 @@ Once pushed, CodePipeline detects the change, rebuilds the Docker image, and red
 
 5. **Commit and push** the updated `requirements.in` and `requirements.txt` to trigger the CI/CD pipeline.
 
-## Notes on `textGeneration` Lambda
 
-The `textGeneration` Lambda does **not** use pip-tools locking. Its `requirements.txt` is minimal:
-
-```
-boto3>=1.35.0
-psycopg2-binary
-```
-
-`psycopg2` and `aws-lambda-powertools` are provided as Lambda Layers (see `cdk/layers/`) rather than bundled into the function package. If you need to add a new direct dependency to `textGeneration`, simply add it to its `requirements.txt` — no Docker build or pip-compile step is needed.
