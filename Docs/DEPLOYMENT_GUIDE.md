@@ -390,9 +390,9 @@ aws ssm put-parameter `
 
 **Web Crawler Seed URLs**
 
-This parameter must exist before running `cdk synth` or deployment will fail. If the SSM parameter is missing at synth time, CDK substitutes a dummy placeholder that causes the knowledge base provisioner to fail.
+This parameter must exist before running `cdk synth` or deployment will fail with an explicit error. The stack validates the parameter at synth time and will not proceed if it is missing.
 
-For deployment purposes, you can use `https://example.com` as a placeholder — the web crawler data source will be created but won't crawl anything meaningful. You can update the actual URLs later through the admin dashboard once the app is deployed.
+For deployment purposes, use `https://example.com` as a placeholder. The web crawler data source will be created with a `.*` exclusion filter applied automatically, meaning nothing will actually be crawled. You can add real URLs later through the admin dashboard once the app is deployed.
 
 _Note: URLs must start with `http://` or `https://` — the protocol is required by the Bedrock web crawler API._
 
@@ -645,7 +645,7 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
 - Solution:
   - Verify the `<PREFIX>-KnowledgeBase` stack deployed successfully in CloudFormation.
   - Check that the S3 bucket for the knowledge base exists and contains your source documents.
-  - If using web crawling, confirm the `/SpecEx/KnowledgeBase/WebCrawlerUrls` SSM parameter is set to valid, publicly accessible URLs.
+  - The web crawler data source is created with a `.*` exclusion filter by default — nothing is crawled until you add real URLs via the admin dashboard.
   - Trigger a manual ingestion job from the Bedrock console under Knowledge Bases.
 
 ## Cleanup

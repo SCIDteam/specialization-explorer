@@ -124,18 +124,27 @@ def _create_kb_and_data_sources(props):
         if urls:
             logger.info(f"Creating Web Crawler Data Source for URLs: {urls}")
             try:
+                exclusion_filters_str = props.get('WebCrawlerExclusionFilters', '')
+                exclusion_filters = [f.strip() for f in exclusion_filters_str.split(',') if f.strip()]
+
+                web_config = {
+                    'sourceConfiguration': {
+                        'urlConfiguration': {
+                            'seedUrls': [{'url': url} for url in urls]
+                        }
+                    }
+                }
+                if exclusion_filters:
+                    web_config['crawlingConfiguration'] = {
+                        'exclusionFilters': exclusion_filters
+                    }
+
                 ds_response = bedrock_agent.create_data_source(
                     knowledgeBaseId=kb_id,
                     name=f"{name}-web-source",
                     dataSourceConfiguration={
                         'type': 'WEB',
-                        'webConfiguration': {
-                            'sourceConfiguration': {
-                                'urlConfiguration': {
-                                    'seedUrls': [{'url': url} for url in urls]
-                                }
-                            }
-                        }
+                        'webConfiguration': web_config
                     },
                     vectorIngestionConfiguration={
                         'chunkingConfiguration': {
@@ -203,18 +212,27 @@ def _ensure_data_sources_for_kb(kb_id, props):
         urls = [url.strip() for url in web_urls_str.split(',') if url.strip()]
         if urls:
             logger.info("Web data source missing on update; creating it.")
+            exclusion_filters_str = props.get('WebCrawlerExclusionFilters', '')
+            exclusion_filters = [f.strip() for f in exclusion_filters_str.split(',') if f.strip()]
+
+            web_config = {
+                'sourceConfiguration': {
+                    'urlConfiguration': {
+                        'seedUrls': [{'url': url} for url in urls]
+                    }
+                }
+            }
+            if exclusion_filters:
+                web_config['crawlingConfiguration'] = {
+                    'exclusionFilters': exclusion_filters
+                }
+
             ds_response = bedrock_agent.create_data_source(
                 knowledgeBaseId=kb_id,
                 name=f"{name}-web-source",
                 dataSourceConfiguration={
                     'type': 'WEB',
-                    'webConfiguration': {
-                        'sourceConfiguration': {
-                            'urlConfiguration': {
-                                'seedUrls': [{'url': url} for url in urls]
-                            }
-                        }
-                    }
+                    'webConfiguration': web_config
                 },
                 vectorIngestionConfiguration={
                     'chunkingConfiguration': {

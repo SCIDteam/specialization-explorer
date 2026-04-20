@@ -280,6 +280,15 @@ export class KnowledgeBaseStack extends Stack {
       webCrawlerUrls = FALLBACK_URL.join(",");
     }
 
+    // Fail synthesis if the parameter resolved to a CDK dummy value (parameter doesn't exist in SSM)
+    if (webCrawlerUrls.startsWith("dummy-value-for-")) {
+      throw new Error(
+        `Required SSM parameter '${WEB_CRAWLER_URLS_PARAM}' does not exist. ` +
+        `Please create it before running cdk synth. ` +
+        `For deployment purposes you can use: aws ssm put-parameter --name "${WEB_CRAWLER_URLS_PARAM}" --value "https://example.com" --type String`
+      );
+    }
+
     // Role for Knowledge Base Provisioner Lambda
     const kbProvisionerRole = new iam.Role(this, "KBProvisionerRole", {
       assumedBy: new iam.ServicePrincipal("lambda.amazonaws.com"),
@@ -330,7 +339,10 @@ export class KnowledgeBaseStack extends Stack {
         MetadataField: METADATA_FIELD_NAME,
         Description: "Knowledge base for RAG application with S3 and web-crawled content",
         S3BucketArn: this.knowledgeBaseBucket.bucketArn,
-        WebCrawlerUrls: webCrawlerUrls
+        WebCrawlerUrls: webCrawlerUrls,
+        // If the placeholder URL is used, exclude everything so nothing gets crawled.
+        // When real URLs are set, no exclusion filter is applied.
+        WebCrawlerExclusionFilters: webCrawlerUrls.trim() === "https://example.com" ? ".*" : "",
       },
     });
 
