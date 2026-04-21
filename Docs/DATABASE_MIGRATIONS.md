@@ -26,7 +26,7 @@ The Specialization Explorer project uses a `node-pg-migrate` system to manage da
 
    ```bash
    ls cdk/lambda/db_setup/migrations/ | tail -1
-   # Use next sequential number (e.g., if last is 008, use 009)
+   # Use next sequential number (e.g., if last is 000, use 001)
    ```
 
 2. **Create migration file:**
@@ -68,9 +68,6 @@ cdk/lambda/db_setup/
 ├── initializer.py        # Database initialization utilities
 └── migrations/           # Migration files directory
     ├── 000_initial_schema.js
-    ├── 001_update_year_to_publish_date.js
-    ├── 002_update_sections_and_media_items.js
-    ├── 003_refactor_session_relationships.js
     └── ...
 ```
 
@@ -184,42 +181,26 @@ graph TD
 2. **Create the migration file:**
 
    ```bash
-   # Example: Adding user preferences table
-   touch cdk/lambda/db_setup/migrations/009_user_preferences.js
+   # Example: Adding audit table
+   touch cdk/lambda/db_setup/migrations/001_add_audit_table.js
    ```
 
 3. **Write the migration:**
 
    ```javascript
    exports.up = (pgm) => {
-     pgm.createTable("textbook_favorites", {
+     pgm.createTable("audit_logs", {
        id: {
          type: "uuid",
          primaryKey: true,
          default: pgm.func("uuid_generate_v4()"),
        },
-       user_session_id: {
-         type: "uuid",
-         notNull: true,
-         references: "user_sessions(id)",
-         onDelete: "CASCADE",
-       },
-       textbook_id: {
-         type: "uuid",
-         notNull: true,
-         references: "textbooks(id)",
-         onDelete: "CASCADE",
-       },
        created_at: { type: "timestamp", default: pgm.func("now()") },
      });
-
-     // Add indexes
-     pgm.createIndex("textbook_favorites", "user_session_id");
-     pgm.createIndex("textbook_favorites", "textbook_id");
    };
 
    exports.down = (pgm) => {
-     pgm.dropTable("textbook_favorites");
+     pgm.dropTable("audit_logs");
    };
    ```
 
@@ -377,17 +358,16 @@ exports.up = (pgm) => {
 exports.up = (pgm) => {
   // Insert default data
   pgm.sql(`
-    INSERT INTO system_settings (key, value) VALUES 
-      ('max_token_limit', '4000'),
-      ('default_model', 'meta.llama3-70b-instruct-v1:0')
-    ON CONFLICT (key) DO NOTHING;
+    INSERT INTO system_settings (daily_token_limit)
+    VALUES (10000)
+    WHERE NOT EXISTS (SELECT 1 FROM system_settings);
   `);
 
   // Update existing data
   pgm.sql(`
-    UPDATE textbooks 
-    SET status = 'Active' 
-    WHERE status IS NULL;
+    UPDATE users
+    SET tokens_used = 0
+    WHERE tokens_used IS NULL;
   `);
 };
 ```
@@ -479,18 +459,43 @@ CREATE TABLE table_name (...); // Will fail if table exists
 ```javascript
 // Good: Safe column addition with default
 exports.up = (pgm) => {
-  pgm.addColumn("textbooks", {
-    status: {
-      type: "varchar",
-      default: "Disabled",
-      notNull: true,
-    },
-  });
+  // Insert default system settings row
+  pgm.sql(`
+    INSERT INTO system_settings (
+      max_messages_per_day,
+      min_messages_before_suggest,
+      max_chatacters_per_user_message,
+      max_chatacters_per_ai_message,
+      temperature,
+      top_p,
+      specialization_list,
+      updated_by,
+      updated_at
+    )
+    SELECT
+      45,
+      4,
+      2000,
+      5000,
+      0.2,
+      0.9,
+      ARRAY[]::text[],
+      NULL,
+      now()
+    WHERE NOT EXISTS (SELECT 1 FROM system_settings);
+  `);
+
+  // Backfill existing users message count if needed
+  pgm.sql(`
+    UPDATE users
+    SET messages_sent = 0
+    WHERE messages_sent IS NULL;
+  `);
 };
 
 // Avoid: Non-nullable column without default
 exports.up = (pgm) => {
-  pgm.addColumn("textbooks", {
+  pgm.addColumn("users", {
     required_field: { type: "varchar", notNull: true }, // This will fail!
   });
 };
