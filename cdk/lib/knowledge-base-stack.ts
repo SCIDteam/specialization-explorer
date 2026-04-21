@@ -339,7 +339,7 @@ export class KnowledgeBaseStack extends Stack {
 
     // Store Knowledge Base ID in AWS Secrets Manager
     const knowledgeBaseIdSecret = new secretsmanager.Secret(this, "KnowledgeBaseIdSecret", {
-      secretName: `${props.stackPrefix}/KnowledgeBase/IdV2`, //TODO: update this to Id
+      secretName: "SpecEx/KnowledgeBase/Id",
       description: "The ID of the Bedrock Knowledge Base",
       secretStringValue: cdk.SecretValue.unsafePlainText(this.knowledgeBaseId),
     });

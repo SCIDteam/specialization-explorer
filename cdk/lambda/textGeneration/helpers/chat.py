@@ -303,7 +303,6 @@ def get_response(
             "intervention": None,
         }
 
-
     # Structure the system array with the cache point
     request_payload = {
             "modelId": model_arn,
