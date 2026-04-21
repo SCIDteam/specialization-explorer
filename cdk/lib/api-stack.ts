@@ -66,28 +66,6 @@ export class ApiGatewayStack extends cdk.Stack {
   ) {
     super(scope, id, props);
 
-
-    const crParams = {
-      service: 'SSM',
-      action: 'putParameter',
-      parameters: {
-        Name: '/SpecEx/API/AllowedOrigins',
-        Value: '*',
-        Type: 'String',
-        Description: 'List of allowed CORS origins for the API',
-      },
-      physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
-      ignoreErrorCodesMatching: 'ParameterAlreadyExists',
-    };
-
-    const initAllowedOrigins = new cr.AwsCustomResource(this, 'InitAllowedOriginsParamV2', {
-      onCreate: crParams,
-      onUpdate: crParams,
-      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-        resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
-      }),
-    });
-
     
     this.layerList = {};
     /**
@@ -119,6 +97,28 @@ export class ApiGatewayStack extends cdk.Stack {
       compatibleRuntimes: [lambda.Runtime.PYTHON_3_12],
       description: "Lambda layer containing the psycopg2 Python library",
     });
+
+    // Create Allowed Origin Parameters
+      const crParams = {
+          service: 'SSM',
+          action: 'putParameter',
+          parameters: {
+            Name: '/SpecEx/API/AllowedOrigins',
+            Value: '*',
+            Type: 'String',
+            Description: 'List of allowed CORS origins for the API',
+          },
+          physicalResourceId: cr.PhysicalResourceId.of(Date.now().toString()),
+          ignoreErrorCodesMatching: 'ParameterAlreadyExists',
+        };
+    
+        const initAllowedOrigins = new cr.AwsCustomResource(this, 'InitAllowedOriginsParamV2', {
+          onCreate: crParams,
+          onUpdate: crParams,
+          policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+            resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+          }),
+        });
 
     // powertoolsLayer does not follow the format of layerList
     const powertoolsLayer = lambda.LayerVersion.fromLayerVersionArn(

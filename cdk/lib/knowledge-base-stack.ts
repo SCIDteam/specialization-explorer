@@ -75,6 +75,7 @@ export class KnowledgeBaseStack extends Stack {
       }),
     });
 
+
     // Create encryption policy for OpenSearch Serverless
     const encryptionPolicy = new opensearchserverless.CfnSecurityPolicy(this, "EncryptionPolicy", {
       name: `${collectionName}-enc`,
@@ -145,7 +146,7 @@ export class KnowledgeBaseStack extends Stack {
       cors: [{
         allowedHeaders: ["*"],
         allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
-        allowedOrigins: ["*"], // TODO: restrict in production
+        allowedOrigins: ["*"], 
         exposedHeaders: ["ETag"],
       }],
     });
