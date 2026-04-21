@@ -309,6 +309,10 @@ def get_response(
             "messages": bedrock_messages,
             "system": [
                 {"text": static_system_prompt},
+                {"cachePoint": {
+                    "type":"default", 
+                    "ttl": "1h"
+                }}
                 {"text": dynamic_prompt}
             ],
             "inferenceConfig": {
