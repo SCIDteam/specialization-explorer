@@ -33,6 +33,7 @@ def handler(event, context=None):
             }
 
     query = body.get('query')
+    is_intro_message = body.get('is_intro_message', False)
     
     # Perform Query Length Validation 
     if len(query) > config.MAX_CHARACTERS_PER_USER_MESSAGE:
@@ -118,7 +119,8 @@ def handler(event, context=None):
             chat_session_id=chat_session_id,
             user_id=user_id,
             db_connection=conn,
-            stream_callback=stream_chunk
+            stream_callback=stream_chunk,
+            is_intro_message=is_intro_message
         )
         
         # Format response to match API contract

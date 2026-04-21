@@ -20,6 +20,9 @@ SONNET_ARN = None
 REGION = os.getenv("REGION", "ca-central-1")
 LLM_REGION = os.getenv("LLM_REGION", "us-west-2")
 
+GUARDRAIL_ID = os.getenv('GUARDRAIL_ID')
+GUARDRAIL_VERSION = os.getenv('GUARDRAIL_VERSION')
+
 # Chat Configuration
 DAILY_TOKEN_LIMIT = 10000
 MIN_EXCHANGES_BEFORE_SUGGEST = 4
@@ -88,6 +91,7 @@ def load_config(db_connection):
     global SPEC_LIST
     global SPEC_PROMPT
     global HAIKU_ARN, SONNET_ARN
+    global GUARDRAIL_ID, GUARDRAIL_VERSION
 
     if _CONFIG_LOADED:
         return
@@ -124,6 +128,16 @@ def load_config(db_connection):
             SONNET_ARN = ssm.get_parameter(Name=ssm_param)["Parameter"]["Value"]
         except Exception as e:
             raise RuntimeError(f"Failed to fetch SSM parameter {ssm_param}: {e}")
+
+    if not GUARDRAIL_ID: 
+        raise RuntimeError(
+            "Missing required environment variables: GUARDRAIL_ID"
+        )
+    
+    if not GUARDRAIL_VERSION: 
+        raise RuntimeError(
+            "Missing required environment variables: GUARDRAIL_VERSION"
+        )
 
     data = fetch_system_config(db_connection)
 

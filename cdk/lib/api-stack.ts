@@ -23,6 +23,11 @@ import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import * as bedrock from "aws-cdk-lib/aws-bedrock";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as crypto from 'crypto';
+
+function computeConfigHash(config: object): string {
+  return crypto.createHash('sha256').update(JSON.stringify(config)).digest('hex');
+}
 
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
@@ -1013,6 +1018,51 @@ export class ApiGatewayStack extends cdk.Stack {
         ],
       })
     );
+
+    // --- Bedrock Input Guardrail ---
+    const guardrailConfig = {
+      piiEntities: ['NAME', 'PHONE', 'EMAIL', 'ADDRESS'],
+      piiInputAction: 'ANONYMIZE',
+      piiInputEnabled: true,
+      promptAttackStrength: 'HIGH',
+      blockedInputMessaging: "Sorry, I can't help with that. I'm the UBC Science Specialization Explorer — I'm here to help you find the right specialization for your academic journey.",
+    };
+
+    const inputGuardrail = new bedrock.CfnGuardrail(this, 'InputGuardrail', {
+      name: `${id}-input-guardrail`,
+      blockedInputMessaging: "Sorry, I can't help with that. I'm the UBC Science Specialization Explorer — I'm here to help you find the right specialization for your academic journey.",
+      blockedOutputsMessaging: 'Response blocked.',
+      sensitiveInformationPolicyConfig: {
+        piiEntitiesConfig: [
+          { type: 'NAME',    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'PHONE',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'EMAIL',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'ADDRESS', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+        ],
+      },
+      contentPolicyConfig: {
+        filtersConfig: [
+          { type: 'PROMPT_ATTACK', inputStrength: 'HIGH', outputStrength: 'NONE' },
+        ],
+      },
+    });
+
+    const configHash = computeConfigHash(guardrailConfig);
+    cdk.Tags.of(inputGuardrail).add('ConfigHash', configHash);
+
+    const inputGuardrailVersion = new bedrock.CfnGuardrailVersion(this, `InputGuardrailVersion-${configHash.substring(0, 8)}`, {
+      guardrailIdentifier: inputGuardrail.attrGuardrailId,
+      description: `Config hash: ${configHash.substring(0, 8)}`,
+    });
+
+    lambdaTextGen.addEnvironment('GUARDRAIL_ID', inputGuardrail.attrGuardrailId);
+    lambdaTextGen.addEnvironment('GUARDRAIL_VERSION', inputGuardrailVersion.attrVersion);
+
+    lambdaTextGen.addToRolePolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: ['bedrock:ApplyGuardrail'],
+      resources: [inputGuardrail.attrGuardrailArn],
+    }));
 
     // Override the Logical ID
     const cfnlambdaTextGen = lambdaTextGen.node
