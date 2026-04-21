@@ -1,4 +1,5 @@
 ﻿# Specialization Explorer
+This prototype explores how Large Language Models (LLMs) and Retrieval-Augmented Generation can support undergraduate students in navigating Bachelor of Science specialization choices through an AI-powered conversational experience. By leveraging conversational AI, institutional academic information, and publicly available alumni data, it enables students to reflect on their interests, compare specialization options, and discover academic pathways that align with their goals through personalized, open-ended dialogue.
 
 | Index | Description |
 | :---------------------------------------------------- | :------------------------------------------------------ |
