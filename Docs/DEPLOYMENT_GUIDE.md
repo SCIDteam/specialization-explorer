@@ -388,54 +388,7 @@ aws ssm put-parameter `
 
 &nbsp;
 
-**Web Crawler Seed URLs**
 
-This parameter must exist before running `cdk synth` or deployment will fail with an explicit error. The stack validates the parameter at synth time and will not proceed if it is missing.
-
-For deployment purposes, use `https://example.com` as a placeholder. The web crawler data source will be created with a `.*` exclusion filter applied automatically, meaning nothing will actually be crawled. You can add real URLs later through the admin dashboard once the app is deployed.
-
-_Note: URLs must start with `http://` or `https://` — the protocol is required by the Bedrock web crawler API._
-
-<details>
-<summary>macOS/Linux</summary>
-
-```bash
-aws ssm put-parameter \
-    --name "/SpecEx/KnowledgeBase/WebCrawlerUrls" \
-    --value "https://example.com" \
-    --type String \
-    --profile <YOUR-PROFILE-NAME>
-```
-
-</details>
-
-<details>
-<summary>Windows CMD</summary>
-
-```cmd
-aws ssm put-parameter ^
-    --name "/SpecEx/KnowledgeBase/WebCrawlerUrls" ^
-    --value "https://example.com" ^
-    --type String ^
-    --profile <YOUR-PROFILE-NAME>
-```
-
-</details>
-
-<details>
-<summary>PowerShell</summary>
-
-```powershell
-aws ssm put-parameter `
-    --name "/SpecEx/KnowledgeBase/WebCrawlerUrls" `
-    --value "https://example.com" `
-    --type String `
-    --profile <YOUR-PROFILE-NAME>
-```
-
-</details>
-
-&nbsp;
 
 
 
@@ -672,7 +625,6 @@ To take down the deployed stack for a fresh redeployment in the future, follow t
      - `/SpecEx/AllowedEmailDomains`
      - `/SpecEx/LLM/HaikuArn`
      - `/SpecEx/LLM/SonnetArn`
-     - `/SpecEx/KnowledgeBase/WebCrawlerUrls`
      - `/SpecEx/API/AllowedOrigins`
 
 5. **Delete ECR Repositories** (if any were created):

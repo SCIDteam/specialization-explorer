@@ -1,7 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { Stack, StackProps, CfnOutput, RemovalPolicy } from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -15,9 +14,7 @@ import {
   Provider,
 } from "aws-cdk-lib/custom-resources";
 
-// Fallback placeholder URL if SSM parameter doesn't exist
 const FALLBACK_URL = ["https://example.com"];
-const WEB_CRAWLER_URLS_PARAM = "/SpecEx/KnowledgeBase/WebCrawlerUrls";
 
 // Bedrock KB / AOSS index settings
 const VECTOR_INDEX_NAME = "bedrock-knowledge-base-default-index";
@@ -273,21 +270,7 @@ export class KnowledgeBaseStack extends Stack {
     vectorIndexProvider.node.addDependency(networkPolicy);
     vectorIndexProvider.node.addDependency(dataAccessPolicy);
 
-    let webCrawlerUrls: string;
-    try {
-      webCrawlerUrls = ssm.StringParameter.valueFromLookup(this, WEB_CRAWLER_URLS_PARAM);
-    } catch {
-      webCrawlerUrls = FALLBACK_URL.join(",");
-    }
-
-    // Fail synthesis if the parameter resolved to a CDK dummy value (parameter doesn't exist in SSM)
-    if (webCrawlerUrls.startsWith("dummy-value-for-")) {
-      throw new Error(
-        `Required SSM parameter '${WEB_CRAWLER_URLS_PARAM}' does not exist. ` +
-        `Please create it before running cdk synth. ` +
-        `For deployment purposes you can use: aws ssm put-parameter --name "${WEB_CRAWLER_URLS_PARAM}" --value "https://example.com" --type String`
-      );
-    }
+    const webCrawlerUrls = FALLBACK_URL.join(",");
 
     // Role for Knowledge Base Provisioner Lambda
     const kbProvisionerRole = new iam.Role(this, "KBProvisionerRole", {
