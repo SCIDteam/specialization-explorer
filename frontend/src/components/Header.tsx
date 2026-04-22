@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Select,
   SelectTrigger,
@@ -8,14 +9,31 @@ import {
 import { Menu, X } from "lucide-react";
 import { useSidebar } from "@/providers/sidebar";
 import { Link, useLocation, useNavigate } from "react-router";
+import { useUser } from "@/providers/user";
 import logoImage from "@/assets/SpecEx-logo.png";
 
 type Mode = "student" | "admin";
+type UserRole = "student" | "admin" | null;
+
+type UserProfile = {
+  id: string;
+  email: string | null;
+  display_name?: string | null;
+  role?: string;
+  created_at?: string;
+  last_seen_at?: string;
+  messages_sent?: number;
+  messages_window_started_at?: string | null;
+  metadata?: Record<string, unknown> | null;
+};
 
 export default function Header() {
   const { mobileOpen, toggleMobile } = useSidebar();
   const location = useLocation();
   const navigate = useNavigate();
+  const { userId, isLoading: isLoadingUser } = useUser();
+
+  const [userRole, setUserRole] = useState<UserRole>(null);
 
   const mode: Mode = location.pathname.startsWith("/admin") ? "admin" : "student";
 
@@ -26,6 +44,68 @@ export default function Header() {
       navigate("/");
     }
   };
+
+  const getPublicToken = async () => {
+    const tokenResponse = await fetch(
+      `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
+    );
+
+    if (!tokenResponse.ok) {
+      throw new Error("Failed to get public token");
+    }
+
+    return tokenResponse.json() as Promise<{ token: string }>;
+  };
+
+  const fetchUserProfile = async (id: string): Promise<UserProfile | null> => {
+    try {
+      const { token } = await getPublicToken();
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/user/${id}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch user profile");
+      }
+
+      return (await response.json()) as UserProfile;
+    } catch (err) {
+      console.error("Error fetching user profile:", err);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const loadRole = async () => {
+      if (isLoadingUser) return;
+
+      if (!userId) {
+        setUserRole(null);
+        return;
+      }
+
+      const profile = await fetchUserProfile(userId);
+      const role = profile?.role;
+
+      if (role === "admin") {
+        setUserRole("admin");
+      } else {
+        setUserRole("student");
+      }
+    };
+
+    loadRole();
+  }, [userId, isLoadingUser]);
+
+  const canSwitchModes = userRole === "admin";
 
   return (
     <header className="fixed top-0 left-0 w-full bg-primary text-white h-[80px] flex items-center px-6 shadow-md z-50">
@@ -56,15 +136,17 @@ export default function Header() {
           </Link>
         </div>
 
-        <Select value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
-          <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white [&_svg:not([class*='text-'])]:text-primary-foreground hover:bg-white/10">
-            <SelectValue placeholder="Select mode" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="student">Mode: Student</SelectItem>
-            <SelectItem value="admin">Mode: Admin</SelectItem>
-          </SelectContent>
-        </Select>
+        {canSwitchModes ? (
+          <Select value={mode} onValueChange={(v) => handleModeChange(v as Mode)}>
+            <SelectTrigger className="w-fit border-primary-foreground bg-transparent text-white [&_svg:not([class*='text-'])]:text-primary-foreground hover:bg-white/10">
+              <SelectValue placeholder="Select mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="student">Mode: Student</SelectItem>
+              <SelectItem value="admin">Mode: Admin</SelectItem>
+            </SelectContent>
+          </Select>
+        ) : null}
       </div>
     </header>
   );
