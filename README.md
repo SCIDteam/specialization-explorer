@@ -97,7 +97,6 @@ Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on
 │   ├── API_DOCUMENTATION.md
 │   ├── ARCHITECTURE_DEEP_DIVE.md
 │   ├── BEDROCK_GUARDRAILS.md
-│   ├── CHANGELOG.md
 │   ├── DATABASE_MIGRATIONS.md
 │   ├── DEPENDENCY_MANAGEMENT.MD
 │   ├── DEPLOYMENT_GUIDE.md
