@@ -358,16 +358,16 @@ exports.up = (pgm) => {
 exports.up = (pgm) => {
   // Insert default data
   pgm.sql(`
-    INSERT INTO system_settings (daily_token_limit)
-    VALUES (10000)
+    INSERT INTO system_settings (max_messages_per_day)
+    VALUES (45)
     WHERE NOT EXISTS (SELECT 1 FROM system_settings);
   `);
 
   // Update existing data
   pgm.sql(`
     UPDATE users
-    SET tokens_used = 0
-    WHERE tokens_used IS NULL;
+    SET messages_sent = 0
+    WHERE messages_sent IS NULL;
   `);
 };
 ```

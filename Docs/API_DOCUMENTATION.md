@@ -809,7 +809,7 @@ Retrieve the latest system configuration settings.
 ```json
 {
   "id": "uuid",
-  "daily_token_limit": 10000,
+  "max_messages_per_day": 45,
   "min_messages_before_suggest": 3,
   "max_chatacters_per_user_message": 2000,
   "max_chatacters_per_ai_message": 4000,
@@ -843,7 +843,7 @@ Update one or more system configuration settings (partial update).
 
 ```json
 {
-  "daily_token_limit": 15000,
+  "max_messages_per_day": 50,
   "temperature": 0.8,
   "top_p": 0.95
 }
@@ -851,7 +851,7 @@ Update one or more system configuration settings (partial update).
 
 **Parameters (all optional):**
 
-- `daily_token_limit` (integer): Max tokens per user per day
+- `max_messages_per_day` (integer): Max messages per user per day
 - `min_messages_before_suggest` (integer): Messages before AI suggestions appear
 - `max_chatacters_per_user_message` (integer): Max user message length
 - `max_chatacters_per_ai_message` (integer): Max AI response length
@@ -870,7 +870,7 @@ Update one or more system configuration settings (partial update).
 curl -X PUT "https://{api-id}.execute-api.{region}.amazonaws.com/prod/admin/system-settings" \
   -H "Authorization: eyJraWQiOiJ..." \
   -H "Content-Type: application/json" \
-  -d '{"daily_token_limit": 15000, "temperature": 0.8}'
+  -d '{"max_messages_per_day": 50, "temperature": 0.8}'
 ```
 
 ---
