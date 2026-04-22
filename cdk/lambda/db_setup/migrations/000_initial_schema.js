@@ -50,8 +50,8 @@ exports.up = (pgm) => {
       role user_role NOT NULL,
       created_at timestamptz DEFAULT now(),
       last_seen_at timestamptz,
-      tokens_used bigint DEFAULT 0,
-      token_window_started_at timestamptz NOT NULL DEFAULT now(),
+      messages_sent bigint DEFAULT 0,
+      messages_window_started_at timestamptz NOT NULL DEFAULT now(),
       metadata jsonb DEFAULT '{}'
     );
 
@@ -135,7 +135,7 @@ exports.up = (pgm) => {
     -- System Settings
     CREATE TABLE IF NOT EXISTS system_settings (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      daily_token_limit int DEFAULT 10000,
+      max_messages_per_day int DEFAULT 45,
       min_messages_before_suggest int DEFAULT 4,
       max_characters_per_user_message int DEFAULT 2000,
       max_characters_per_ai_message int DEFAULT 5000,
@@ -329,7 +329,7 @@ exports.up = (pgm) => {
     -- SEED: system_settings (single default row)
     -- ==============================
     INSERT INTO system_settings (
-      daily_token_limit,
+      max_messages_per_day,
       min_messages_before_suggest,
       max_characters_per_user_message,
       max_characters_per_ai_message,
@@ -344,7 +344,7 @@ exports.up = (pgm) => {
       updated_at
     )
     SELECT
-      10000,
+      45,
       4,
       2000,
       5000,
