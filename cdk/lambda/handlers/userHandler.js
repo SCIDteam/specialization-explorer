@@ -557,6 +557,23 @@ exports.handler = async (event) => {
         break;
       }
 
+      case "GET /system-settings/max-characters-per-user-message": {
+        const rows = await sqlConnection`
+          SELECT max_characters_per_user_message
+          FROM system_settings
+          ORDER BY updated_at DESC NULLS LAST
+          LIMIT 1
+        `;
+
+        const fallback = {
+          max_characters_per_user_message: 2000,
+        };
+
+        response.statusCode = 200;
+        response.body = JSON.stringify(rows[0] ?? fallback);
+        break;
+      }
+
       default:
         throw new Error(`Unsupported route: "${pathData}"`);
     }

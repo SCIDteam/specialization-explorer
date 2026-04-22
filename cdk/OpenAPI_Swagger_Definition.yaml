@@ -1900,6 +1900,37 @@ paths:
         type: aws_proxy
       x-amazon-apigateway-request-validator: all
 
+  /system-settings/max-characters-per-user-message:
+    <<: *commonOptions
+    get:
+      tags: [System]
+      summary: Get max characters allowed per user message
+      operationId: get_system_setting_max_characters_per_user_message
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Max characters allowed per user message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  max_characters_per_user_message:
+                    type: integer
+                required:
+                  - max_characters_per_user_message
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
   /analytics/{analytics_id}:
     <<: *commonOptions
     get:
