@@ -18,13 +18,30 @@ This document summarizes the main user flows, UI controls, and administrative ac
 ---
 
 ## Student View
-![image](./media/landing_page.png)
+![image](./media/anonymous-pop-up.png)
+![image](./media/home-page.png)
+![image](./media/first-interaction.png)
+![image](./media/requirements-averages.png)
+![image](./media/suggestion-hallucination.png)
+![image](./media/expanded-resources.png)
 
 ---
 
 ## Administrator View
 
 Switch to Instructor mode via the Mode selector (top header). Instructors have access to the Material Editor and additional tools.
+
+![image](./media/admin-log-in.png)
+![image](./media/admin-dashboard.png)
+![image](./media/admin-add-website.png)
+![image](./media/admin-add-file.png)
+![image](./media/admin-analytics.png)
+![image](./media/admin-system-settings.png)
+![image](./media/admin-system-settings-stack.png)
+![image](./media/admin-messages-that-affect-text-gen.png)
+![image](./media/admin-messages-that-do-not-affect-text-gen.png)
+![image](./media/admin-message-versioning.png)
+![image](./media/admin-chat-history.png)
 
 
 
