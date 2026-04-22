@@ -10,7 +10,7 @@ from helpers.logic import get_current_prompt
 from helpers.bedrock import retrieve_documents, format_context_for_prompt
 from helpers.intervention import assess_response
 import helpers.config as config
-from helpers.token_limits import check_limit, record_usage
+from helpers.message_limits import check_limit, record_usage
 from helpers.guardrail import invoke_guardrail, ACTION_ANONYMIZED, ACTION_BLOCKED
 
 logger = logging.getLogger(__name__)
