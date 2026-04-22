@@ -13,6 +13,7 @@ interface AiChatInputProps {
   disabled?: boolean;
   className?: string;
   onSend?: () => void;
+  maxLength?: number;
 }
 
 export function AiChatInput({
@@ -25,6 +26,7 @@ export function AiChatInput({
   disabled = false,
   className,
   onSend,
+  maxLength = 50000,
 }: AiChatInputProps) {
   const editableRef = useRef<HTMLDivElement>(null);
   const isComposingRef = useRef(false);
@@ -138,15 +140,13 @@ export function AiChatInput({
     const cursorPosition = saveCursorPosition();
     let text = getTextContent();
 
-    // Enforce 1000 character limit
-    if (text.length > 1000) {
-      text = text.slice(0, 1000);
-      // Update the content to reflect the truncation
+    if (text.length > maxLength) {
+      text = text.slice(0, maxLength);
+
       isUpdatingRef.current = true;
       const highlighted = highlightText(text);
       editableRef.current.innerHTML = highlighted || "";
-      // Restore cursor at the end
-      restoreCursorPosition(Math.min(cursorPosition, 1000));
+      restoreCursorPosition(Math.min(cursorPosition, maxLength));
       isUpdatingRef.current = false;
     }
 
@@ -158,7 +158,7 @@ export function AiChatInput({
     if (editableRef.current.innerHTML !== highlighted) {
       isUpdatingRef.current = true;
       editableRef.current.innerHTML = highlighted || "";
-      restoreCursorPosition(cursorPosition);
+      restoreCursorPosition(Math.min(cursorPosition, text.length));
       isUpdatingRef.current = false;
     }
   };
@@ -204,13 +204,16 @@ export function AiChatInput({
 
       // Only restore cursor if we had focus
       if (document.activeElement === editableRef.current) {
-        restoreCursorPosition(cursorPosition);
+        restoreCursorPosition(Math.min(cursorPosition, value.length));
       }
 
       isUpdatingRef.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
+
+  const warningThreshold = Math.floor(maxLength * 0.85);
+  const dangerThreshold = Math.floor(maxLength * 0.95);
 
   return (
     <div className={cn("relative w-full", className)}>
@@ -263,18 +266,18 @@ export function AiChatInput({
       </Button>
 
       {/* Character counter - only shown when approaching limit */}
-      {value.length >= 850 && (
-        <div
-          className={cn(
-            "text-xs mt-1 text-right transition-colors",
-            value.length > 950
-              ? "text-destructive font-medium"
-              : "text-muted-foreground"
-          )}
-        >
-          {value.length}/1000 characters
-        </div>
-      )}
+      <div
+        className={cn(
+          "text-xs mt-1 text-right transition-colors",
+          value.length >= dangerThreshold
+            ? "text-destructive font-medium"
+            : value.length >= warningThreshold
+            ? "text-amber-600 font-medium"
+            : "text-muted-foreground"
+        )}
+      >
+        {value.length}/{maxLength}
+      </div>
     </div>
   );
 }

@@ -8,6 +8,11 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import type { Message } from "@/types/Chat";
 import { useUser } from "@/providers/user";
 
+type MaxCharactersResponse = {
+  max_characters_per_user_message?: number;
+};
+
+const DEFAULT_MAX_CHARACTERS_PER_USER_MESSAGE = 50000;
 
 const WELCOME_PROMPT = `Hello! Please act as the Specialization Explorer.
 1. Introduce yourself briefly.
@@ -42,6 +47,10 @@ export default function AIChatPage() {
 
   const [isTokenLimitReached, setIsTokenLimitReached] = useState(false);
   const [tokenResetTime, setTokenResetTime] = useState<string | null>(null);
+
+  const [maxCharactersPerUserMessage, setMaxCharactersPerUserMessage] = useState(
+    DEFAULT_MAX_CHARACTERS_PER_USER_MESSAGE
+  );
 
   const formatResetTime = (isoString: string) => {
     try {
@@ -222,10 +231,10 @@ export default function AIChatPage() {
               prev.map((msg) =>
                 msg.id === streamingMessageId
                   ? {
-                    ...msg,
-                    text: msg.text + message.content,
-                    isTyping: false,
-                  }
+                      ...msg,
+                      text: msg.text + message.content,
+                      isTyping: false,
+                    }
                   : msg
               )
             );
@@ -275,10 +284,10 @@ export default function AIChatPage() {
               prev.map((msg) =>
                 msg.id === streamingMessageId
                   ? {
-                    ...msg,
-                    text: message.message || "An error occurred",
-                    isTyping: false,
-                  }
+                      ...msg,
+                      text: message.message || "An error occurred",
+                      isTyping: false,
+                    }
                   : msg
               )
             );
@@ -310,9 +319,47 @@ export default function AIChatPage() {
     },
   });
 
-  // Load chat history and redirect if no chat session ID
-  useEffect(() => {
+  const fetchMaxCharactersPerUserMessage = async () => {
+    try {
+      const tokenResponse = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/user/publicToken`
+      );
+      if (!tokenResponse.ok) {
+        throw new Error("Failed to get public token");
+      }
 
+      const { token } = await tokenResponse.json();
+
+      const response = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/system-settings/max-characters-per-user-message`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch max_characters_per_user_message");
+      }
+
+      const data: MaxCharactersResponse = await response.json();
+
+      setMaxCharactersPerUserMessage(
+        data.max_characters_per_user_message ??
+          DEFAULT_MAX_CHARACTERS_PER_USER_MESSAGE
+      );
+    } catch (error) {
+      console.error("Failed to fetch max user message length:", error);
+      setMaxCharactersPerUserMessage(DEFAULT_MAX_CHARACTERS_PER_USER_MESSAGE);
+    }
+  };
+
+  useEffect(() => {
+    fetchMaxCharactersPerUserMessage();
+  }, []);
+
+  useEffect(() => {
     if (!activeChatSessionId) {
       return;
     }
@@ -430,7 +477,7 @@ export default function AIChatPage() {
         query: promptText,
         chat_session_id: activeChatSessionId,
         user_id: userId,
-        is_intro_message: true
+        is_intro_message: true,
       });
 
       if (!success) {
@@ -456,7 +503,7 @@ export default function AIChatPage() {
               query: promptText,
               chat_session_id: activeChatSessionId,
               user_id: userId,
-              is_intro_message: true
+              is_intro_message: true,
             }),
           }
         );
@@ -507,10 +554,10 @@ export default function AIChatPage() {
           prev.map((msg) =>
             msg.id === botMsg.id
               ? {
-                ...msg,
-                text: "Sorry, there was an error processing your request.",
-                isTyping: false,
-              }
+                  ...msg,
+                  text: "Sorry, there was an error processing your request.",
+                  isTyping: false,
+                }
               : msg
           )
         );
@@ -624,7 +671,7 @@ export default function AIChatPage() {
       if (!response.ok) {
         if (response.status === 429) {
           const errData = await response.json();
-          if (errData.error === 'TOKEN_LIMIT_EXCEEDED') {
+          if (errData.error === "TOKEN_LIMIT_EXCEEDED") {
             setIsTokenLimitReached(true);
             if (errData.token_usage?.reset_at) {
               setTokenResetTime(formatResetTime(errData.token_usage.reset_at));
@@ -670,10 +717,10 @@ export default function AIChatPage() {
         prev.map((msg) =>
           msg.id === botMsg.id
             ? {
-              ...msg,
-              text: "Sorry, there was an error processing your request.",
-              isTyping: false,
-            }
+                ...msg,
+                text: "Sorry, there was an error processing your request.",
+                isTyping: false,
+              }
             : msg
         )
       );
@@ -694,15 +741,15 @@ export default function AIChatPage() {
         />
       );
     } else {
-      return (
-        <AIChatMessage
-          key={message.id}
-          text={message.text}
-          sources={message.sources_used}
-          warning={message.warning}
-          isTyping={message.isTyping}
-        />
-      );
+    return (
+      <AIChatMessage
+        key={message.id}
+        text={message.text}
+        sources={message.sources_used}
+        warning={message.warning}
+        isTyping={message.isTyping}
+      />
+    );
     }
   }
 
@@ -743,6 +790,7 @@ export default function AIChatPage() {
                 <AiChatInput
                   value={message}
                   onChange={(val: string) => setMessage(val)}
+                  maxLength={maxCharactersPerUserMessage}
                   placeholder={
                     isTokenLimitReached
                       ? `Daily limit reached. Resets at ${tokenResetTime || "soon"}`
