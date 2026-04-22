@@ -27,8 +27,8 @@ type UserProfile = {
   role?: string;
   created_at?: string;
   last_seen_at?: string;
-  tokens_used?: number;
-  token_window_started_at?: string | null;
+  messages_sent?: number;
+  messages_window_started_at?: string | null;
   metadata?: Record<string, unknown> | null;
 };
 
