@@ -33,7 +33,7 @@ import type {
 } from "@/components/Admin/SystemMessageEditor";
 
 type SystemSettingsDTO = {
-  daily_token_limit: number;
+  max_messages_per_day: number;
   min_messages_before_suggest: number;
   max_characters_per_user_message: number;
   max_characters_per_ai_message: number;
@@ -51,7 +51,7 @@ type SystemSettingsDTO = {
 type SystemSettingsAPIResponse = Partial<SystemSettingsDTO>;
 
 const DEFAULT_SETTINGS: SystemSettingsDTO = {
-  daily_token_limit: 10000,
+  max_messages_per_day: 45,
   min_messages_before_suggest: 4,
   max_characters_per_user_message: 2000,
   max_characters_per_ai_message: 5000,
@@ -539,8 +539,8 @@ export default function SystemSettings() {
       const data: SystemSettingsAPIResponse = await res.json();
 
       setSettings({
-        daily_token_limit:
-          data.daily_token_limit ?? DEFAULT_SETTINGS.daily_token_limit,
+        max_messages_per_day:
+          data.max_messages_per_day ?? DEFAULT_SETTINGS.max_messages_per_day,
         min_messages_before_suggest:
           data.min_messages_before_suggest ?? DEFAULT_SETTINGS.min_messages_before_suggest,
         max_characters_per_user_message:
@@ -601,7 +601,7 @@ export default function SystemSettings() {
       if (!adminEmail) throw new Error("Missing admin email (not authenticated?)");
 
       const payload = {
-        daily_token_limit: settings.daily_token_limit,
+        max_messages_per_day: settings.max_messages_per_day,
         min_messages_before_suggest: settings.min_messages_before_suggest,
         max_characters_per_user_message: settings.max_characters_per_user_message,
         max_characters_per_ai_message: settings.max_characters_per_ai_message,
@@ -807,20 +807,22 @@ export default function SystemSettings() {
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="daily-token-limit">Daily Token Limit</Label>
+                  <Label htmlFor="max-messages-per-day">Max messages per day</Label>
                   <Input
-                    id="daily-token-limit"
+                    id="max-messages-per-day"
                     type="number"
                     min={1}
-                    value={settings.daily_token_limit}
+                    value={settings.max_messages_per_day}
                     onChange={(e) =>
                       setSettings((s) => ({
                         ...s,
-                        daily_token_limit: Number(e.target.value),
+                        max_messages_per_day: Number(e.target.value),
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500">Number of tokens a user can send to the LLM per 24 hours. 1 token is roughly 1.33 words</p>
+                  <p className="text-xs text-gray-500">
+                    Maximum number of messages a user can send in a 24 hour window
+                  </p>
                 </div>
 
                 <div className="space-y-2">
