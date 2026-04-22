@@ -69,7 +69,6 @@ def handler(event, context=None):
     conn = None
     try:
         conn = get_db_connection()
-        conn.autocommit = False
 
         # Validate the session ownership before doing anything with the session 
         if user_id: 
