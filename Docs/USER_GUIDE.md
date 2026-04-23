@@ -94,7 +94,6 @@ Click "Add Alumni Data (CSV)" to upload a CSV file and its corresponding metadat
 
 Once data sources are staged, click "Sync" to kick off an ingestion job. The table shows each source's type, name, and latest ingestion run status (Pending, Queued, Running, Completed, or Failed).
 
-> **Tip:** For larger or bulk uploads, it's recommended to upload files directly to the S3 bucket via the AWS Console and trigger the sync job from there — it gives more flexibility when ingesting large amounts of data.
 
 ### Analytics
 
