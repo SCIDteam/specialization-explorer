@@ -26,6 +26,15 @@
 
 AWS CodePipeline and AWS CodeBuild are used to create the Bedrock Knowledge Base and OpenSearch Serverless collection.
 
+### Why Amazon Bedrock Knowledge Bases?
+
+Bedrock Knowledge Bases handles the full RAG pipeline out of the box — ingestion, chunking, embedding, and semantic retrieval — without requiring any custom tooling. A few reasons this was the right choice here:
+
+- **Multi-source ingestion** — it natively supports websites, S3 files (CSV, JSON, PDF, etc.), and more, without needing separate ingestion scripts per source type. This is what makes the tool adaptable to different domains beyond UBC Science.
+- **Managed embeddings** — there's no need to manage embedding models or vector stores manually. Bedrock handles the conversion of content into vector representations and stores them in OpenSearch Serverless automatically.
+- **Semantic retrieval** — queries are matched against the knowledge base using semantic similarity rather than keyword search, meaning the AI retrieves contextually relevant content even when the wording doesn't match exactly.
+- **Always up to date** — adding or updating a data source and triggering a sync is all it takes to refresh the knowledge base. No redeployment needed.
+
 ### Database Schema
 
 ![Database Diagram](./media/db-diagram.png)
