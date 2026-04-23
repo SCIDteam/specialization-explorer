@@ -34,6 +34,7 @@ export class KnowledgeBaseStack extends Stack {
   public readonly knowledgeBaseBucket: s3.Bucket;
   public readonly vectorCollection: opensearchserverless.CfnCollection;
   public readonly knowledgeBaseId: string;
+  public readonly knowledgeBaseSecret: secretsmanager.Secret;
   public readonly s3DataSourceId: string;
   public readonly webCrawlerDataSourceId: string;
 
@@ -338,8 +339,8 @@ export class KnowledgeBaseStack extends Stack {
     this.webCrawlerDataSourceId = kbCustomResource.getAttString("WebCrawlerDataSourceId");
 
     // Store Knowledge Base ID in AWS Secrets Manager
-    const knowledgeBaseIdSecret = new secretsmanager.Secret(this, "KnowledgeBaseIdSecret", {
-      secretName: "SpecEx/KnowledgeBase/Id",
+    this.knowledgeBaseSecret = new secretsmanager.Secret(this, "KnowledgeBaseIdSecret", {
+      secretName: `${props.stackPrefix}/KnowledgeBase/Id`,
       description: "The ID of the Bedrock Knowledge Base",
       secretStringValue: cdk.SecretValue.unsafePlainText(this.knowledgeBaseId),
     });
@@ -376,7 +377,7 @@ export class KnowledgeBaseStack extends Stack {
     });
 
     new CfnOutput(this, "KnowledgeBaseIdSecretArn", {
-      value: knowledgeBaseIdSecret.secretArn,
+      value: this.knowledgeBaseSecret.secretArn,
       description: "The ARN of the secret containing the Knowledge Base ID",
     });
   }

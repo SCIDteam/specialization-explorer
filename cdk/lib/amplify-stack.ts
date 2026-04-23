@@ -13,6 +13,7 @@ interface AmplifyStackProps extends cdk.StackProps {
   githubRepo: string;
   githubBranch?: string;
   knowledgeBaseBucketName: string;
+  allowedOriginsParamName: string;
 }
 
 export class AmplifyStack extends cdk.Stack {
@@ -104,7 +105,7 @@ export class AmplifyStack extends cdk.Stack {
         service: 'SSM',
         action: 'putParameter',
         parameters: {
-          Name: '/SpecEx/API/AllowedOrigins',
+          Name: props.allowedOriginsParamName,
           Value: amplifyUrl,
           Type: 'String',
           Overwrite: true, // This allows the update
@@ -115,7 +116,7 @@ export class AmplifyStack extends cdk.Stack {
         service: 'SSM',
         action: 'putParameter',
         parameters: {
-          Name: '/SpecEx/API/AllowedOrigins',
+          Name: props.allowedOriginsParamName,
           Value: amplifyUrl,
           Type: 'String',
           Overwrite: true,
@@ -123,7 +124,7 @@ export class AmplifyStack extends cdk.Stack {
       },
       policy: cdk.custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [
-          `arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`,
+          `arn:aws:ssm:${this.region}:${this.account}:parameter${props.allowedOriginsParamName}`,
         ],
       }),
     });

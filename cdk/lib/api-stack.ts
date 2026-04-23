@@ -32,6 +32,7 @@ function computeConfigHash(config: object): string {
 interface ApiGatewayStackProps extends cdk.StackProps {
   ecrRepositories: { [key: string]: ecr.Repository };
   knowledgeBaseBucket: s3.IBucket;
+  knowledgeBaseSecret: secretsmanager.ISecret;
 }
 
 export class ApiGatewayStack extends cdk.Stack {
@@ -44,6 +45,7 @@ export class ApiGatewayStack extends cdk.Stack {
   public readonly apiGW_basedURL: string;
   private eventApi: appsync.GraphqlApi;
   public readonly secret: secretsmanager.ISecret;
+  public readonly allowedOriginsParamName: string;
   public getEndpointUrl = () => this.api.url;
   public getUserPoolId = () => this.userPool.userPoolId;
   public getEventApiUrl = () => this.eventApi.graphqlUrl;
@@ -99,11 +101,12 @@ export class ApiGatewayStack extends cdk.Stack {
     });
 
     // Create Allowed Origin Parameters
+      this.allowedOriginsParamName = `/${id}/API/AllowedOrigins`;
       const crParams = {
           service: 'SSM',
           action: 'putParameter',
           parameters: {
-            Name: '/SpecEx/API/AllowedOrigins',
+            Name: this.allowedOriginsParamName,
             Value: '*',
             Type: 'String',
             Description: 'List of allowed CORS origins for the API',
@@ -116,7 +119,7 @@ export class ApiGatewayStack extends cdk.Stack {
           onCreate: crParams,
           onUpdate: crParams,
           policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
-            resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+            resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
           }),
         });
 
@@ -626,9 +629,7 @@ export class ApiGatewayStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["secretsmanager:GetSecretValue"],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*KnowledgeBase/Id-*`,
-        ],
+        resources: [props.knowledgeBaseSecret.secretArn],
       })
     );
 
@@ -906,35 +907,35 @@ export class ApiGatewayStack extends cdk.Stack {
       role: coglambdaRole,
     });
 
-    preSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    preSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     preSignupLambda.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
-    publicTokenLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    publicTokenLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     publicTokenLambda.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
-    userAuthFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    userAuthFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     userAuthFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
-    adminAuthorizationFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    adminAuthorizationFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     adminAuthorizationFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
     this.userPool.addTrigger(
@@ -988,7 +989,7 @@ export class ApiGatewayStack extends cdk.Stack {
           REGION: this.region,
           LLM_REGION: "us-west-2",
           BEDROCK_MODEL_ID: `us.anthropic.claude-sonnet-4-6`,
-          KB_SECRET_NAME: "SpecEx/KnowledgeBase/Id"
+          KB_SECRET_NAME: props.knowledgeBaseSecret.secretName
         },
       }
     )
@@ -996,7 +997,7 @@ export class ApiGatewayStack extends cdk.Stack {
     // Grand Knowledge Base Secret Access 
     lambdaTextGen.addToRolePolicy(new iam.PolicyStatement({
       actions: ["secretsmanager:GetSecretValue"],
-      resources: [`arn:aws:secretsmanager:${this.region}:${this.account}:secret:*KnowledgeBase/Id-*`]
+      resources: [props.knowledgeBaseSecret.secretArn]
     }))
 
     // Grant SSM parameter access for HaikuArn and SonnetArn
@@ -1094,19 +1095,19 @@ export class ApiGatewayStack extends cdk.Stack {
       alarmDescription: 'Text Generation Lambda approaching concurrency limit',
     });
 
-    lambdaTextGen.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaTextGen.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     lambdaTextGen.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
-    AutoSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    AutoSignupLambda.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     AutoSignupLambda.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1164,15 +1165,15 @@ export class ApiGatewayStack extends cdk.Stack {
         SCHEDULER_ROLE_ARN: `arn:aws:iam::${this.account}:role/${id}-schedulerInvokeRole`,
         SCHEDULER_TARGET_ARN: `arn:aws:lambda:${this.region}:${this.account}:function:${id}-lambdaKnowledgeBase`,
         KNOWLEDGE_BASE_BUCKET_NAME: props.knowledgeBaseBucket.bucketName,
-        KB_SECRET_NAME: "SpecEx/KnowledgeBase/Id"
+        KB_SECRET_NAME: props.knowledgeBaseSecret.secretName
       },
     });
 
-    lambdaKnowledgeBase.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaKnowledgeBase.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     lambdaKnowledgeBase.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1213,9 +1214,7 @@ export class ApiGatewayStack extends cdk.Stack {
       new iam.PolicyStatement({
         effect: iam.Effect.ALLOW,
         actions: ["secretsmanager:GetSecretValue"],
-        resources: [
-          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:*KnowledgeBase/Id-*`
-        ],
+        resources: [props.knowledgeBaseSecret.secretArn],
       })
     );
     lambdaKnowledgeBase.addToRolePolicy(
@@ -1283,11 +1282,11 @@ export class ApiGatewayStack extends cdk.Stack {
       tracing: lambda.Tracing.ACTIVE,
     });
 
-    lambdaUserFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaUserFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     lambdaUserFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1332,11 +1331,11 @@ export class ApiGatewayStack extends cdk.Stack {
       tracing: lambda.Tracing.ACTIVE,
     });
 
-    lambdaSystemMessagesFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaSystemMessagesFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     lambdaSystemMessagesFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1391,11 +1390,11 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/chat_sessions*`,
     });
 
-    lambdaChatSessionFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaChatSessionFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     lambdaChatSessionFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1431,11 +1430,11 @@ export class ApiGatewayStack extends cdk.Stack {
       sourceArn: `arn:aws:execute-api:${this.region}:${this.account}:${this.api.restApiId}/*/*/admin*`,
     });
 
-    lambdaAdminFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    lambdaAdminFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     lambdaAdminFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1484,11 +1483,11 @@ export class ApiGatewayStack extends cdk.Stack {
       alarmDescription: 'WebSocket Connect Lambda approaching concurrency limit',
     });
 
-    connectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    connectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     connectFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1531,19 +1530,19 @@ export class ApiGatewayStack extends cdk.Stack {
       alarmDescription: 'WebSocket Default Lambda approaching concurrency limit',
     });
 
-    defaultFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    defaultFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     defaultFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
-    disconnectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', '/SpecEx/API/AllowedOrigins');
+    disconnectFunction.addEnvironment('ALLOWED_ORIGIN_PARAM', this.allowedOriginsParamName);
     disconnectFunction.addToRolePolicy(new iam.PolicyStatement({
       effect: iam.Effect.ALLOW,
       actions: ["ssm:GetParameter", "ssm:GetParameters"],
-      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter/SpecEx/API/AllowedOrigins`],
+      resources: [`arn:aws:ssm:${this.region}:${this.account}:parameter${this.allowedOriginsParamName}`],
     }));
 
 
@@ -1637,3 +1636,5 @@ export class ApiGatewayStack extends cdk.Stack {
 
   }
 }
+
+
