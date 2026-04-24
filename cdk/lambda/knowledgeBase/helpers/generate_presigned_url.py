@@ -14,6 +14,7 @@ REGION = os.environ["REGION"]
 
 ALLOWED_CONTENT_TYPES = {
     "text/csv",
+    "text/markdown",
     "application/json",
     "text/json",
     "application/octet-stream",
@@ -42,11 +43,18 @@ def _response(event, status_code: int, body: dict):
 def _sanitize_file_name(file_name: str) -> str:
     return os.path.basename(file_name).strip()
 
+def _is_markdown_file(file_name: str) -> bool:
+    lower_name = file_name.lower()
+    return lower_name.endswith(".md") or lower_name.endswith(".markdown")
+
 def _infer_upload_prefix(file_name: str, content_type: str) -> str:
     lower_name = file_name.lower()
 
     if lower_name.endswith(".csv") or content_type == "text/csv":
         return "uploads/csv"
+
+    if _is_markdown_file(file_name) or content_type == "text/markdown":
+        return "uploads/markdown"
 
     if lower_name.endswith(".json") or content_type in {"application/json", "text/json"}:
         return "uploads/json"
@@ -80,6 +88,9 @@ def generate_presigned_url(event):
 
     if lower_name.endswith(".csv") and content_type not in {"text/csv", "application/octet-stream"}:
         return _response(event, 400, {"error": "CSV files must use content_type text/csv or application/octet-stream"})
+
+    if _is_markdown_file(file_name) and content_type not in {"text/markdown", "application/octet-stream"}:
+        return _response(event, 400, {"error": "Markdown files must use content_type text/markdown or application/octet-stream"})
 
     if lower_name.endswith(".json") and content_type not in {"application/json", "text/json", "application/octet-stream"}:
         return _response(event, 400, {"error": "JSON files must use content_type application/json, text/json, or application/octet-stream"})
