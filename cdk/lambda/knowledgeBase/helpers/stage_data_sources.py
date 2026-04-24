@@ -41,23 +41,28 @@ def _get_user_id_by_email(connection, email: str) -> str | None:
         return str(row[0]) if row else None
 
 
-def _validate_file_pair(csv_file_name: str, metadata_file_name: str) -> str | None:
-    """
-    Validate that the uploaded files are a proper CSV + metadata JSON pair
+def _is_markdown_file(file_name: str) -> bool:
+    lower_name = file_name.lower()
+    return lower_name.endswith(".md") or lower_name.endswith(".markdown")
 
-    The metadata file must end in .json and must exactly match:
-    <csv_file_name>.metadata.json
-    """
-    if not csv_file_name.endswith(".csv"):
-        return "csv_file_name must end with .csv"
+
+def _validate_file_pair(source_type: str, file_name: str, metadata_file_name: str) -> str | None:
+    if source_type == "csv":
+        if not file_name.endswith(".csv"):
+            return "csv_file_name must end with .csv"
+    elif source_type == "markdown":
+        if not _is_markdown_file(file_name):
+            return "markdown_file_name must end with .md or .markdown"
+    else:
+        return "Unsupported file source type"
 
     if not metadata_file_name.endswith(".json"):
         return "metadata_file_name must end with .json"
 
-    expected_metadata_name = f"{csv_file_name}.metadata.json"
+    expected_metadata_name = f"{file_name}.metadata.json"
     if metadata_file_name != expected_metadata_name:
         return (
-            "metadata_file_name must exactly match the CSV base name as "
+            "metadata_file_name must exactly match the primary file base name as "
             f"'{expected_metadata_name}'"
         )
 
@@ -191,12 +196,13 @@ def stage_data_sources(event, body, connection):
     Supported request types:
     - type = "website"
     - type = "csv"
+    - type = "markdown"
     """
     source_type = body.get("type")
     created_by = body.get("created_by")
 
-    if source_type not in {"website", "csv"}:
-        return _response(event, 400, {"error": "type must be one of: website, csv"})
+    if source_type not in {"website", "csv", "markdown"}:
+        return _response(event, 400, {"error": "type must be one of: website, csv, markdown"})
 
     if not created_by:
         return _response(event, 400, {"error": "Missing created_by"})
@@ -272,43 +278,51 @@ def stage_data_sources(event, body, connection):
                 },
             )
 
-        # source_type == "csv"
-        csv_file_name = body.get("csv_file_name")
-        csv_s3_bucket = body.get("csv_s3_bucket")
-        csv_s3_key = body.get("csv_s3_key")
+        if source_type == "csv":
+            primary_file_name = body.get("csv_file_name")
+            primary_s3_bucket = body.get("csv_s3_bucket")
+            primary_s3_key = body.get("csv_s3_key")
+            primary_data_source_type = "csv"
+            primary_source_label = "csv"
+        else:
+            primary_file_name = body.get("markdown_file_name")
+            primary_s3_bucket = body.get("markdown_s3_bucket")
+            primary_s3_key = body.get("markdown_s3_key")
+            primary_data_source_type = "markdown"
+            primary_source_label = "markdown"
 
         metadata_file_name = body.get("metadata_file_name")
         metadata_s3_bucket = body.get("metadata_s3_bucket")
         metadata_s3_key = body.get("metadata_s3_key")
 
-        if not csv_file_name or not csv_s3_bucket or not csv_s3_key:
-            return _response(event, 400, {"error": "Missing CSV file details"})
+        if not primary_file_name or not primary_s3_bucket or not primary_s3_key:
+            return _response(event, 400, {"error": f"Missing {primary_source_label} file details"})
 
         if not metadata_file_name or not metadata_s3_bucket or not metadata_s3_key:
             return _response(event, 400, {"error": "Missing metadata JSON file details"})
 
-        pair_error = _validate_file_pair(csv_file_name, metadata_file_name)
+        pair_error = _validate_file_pair(source_type, primary_file_name, metadata_file_name)
         if pair_error:
             return _response(event, 400, {"error": pair_error})
 
         try:
-            _assert_s3_object_exists(csv_s3_bucket, csv_s3_key)
+            _assert_s3_object_exists(primary_s3_bucket, primary_s3_key)
             _assert_s3_object_exists(metadata_s3_bucket, metadata_s3_key)
         except Exception as e:
             logger.error("Uploaded file not found in S3: %s", e, exc_info=True)
             return _response(event, 400, {"error": "One or both uploaded files do not exist in S3"})
 
-        existing_csv_id = _existing_file_row_id(
-            connection, s3_bucket=csv_s3_bucket, s3_key=csv_s3_key
+        existing_primary_id = _existing_file_row_id(
+            connection, s3_bucket=primary_s3_bucket, s3_key=primary_s3_key
         )
-        if existing_csv_id:
+        if existing_primary_id:
             return _response(
                 event,
                 409,
                 {
-                    "error": "CSV file already exists in data_sources",
-                    "existing_data_source_id": existing_csv_id,
-                    "csv_file_name": csv_file_name,
+                    "error": f"{primary_source_label.capitalize()} file already exists in data_sources",
+                    "existing_data_source_id": existing_primary_id,
+                    "file_name": primary_file_name,
                 },
             )
 
@@ -326,11 +340,11 @@ def stage_data_sources(event, body, connection):
                 },
             )
 
-        csv_data_source_metadata = {
+        primary_data_source_metadata = {
             "source": "staged_s3_file",
             "action": "staged_for_future_sync",
-            "s3_bucket": csv_s3_bucket,
-            "s3_key": csv_s3_key,
+            "s3_bucket": primary_s3_bucket,
+            "s3_key": primary_s3_key,
             "companion_file_name": metadata_file_name,
             "companion_s3_bucket": metadata_s3_bucket,
             "companion_s3_key": metadata_s3_key,
@@ -341,17 +355,17 @@ def stage_data_sources(event, body, connection):
             "action": "staged_for_future_sync",
             "s3_bucket": metadata_s3_bucket,
             "s3_key": metadata_s3_key,
-            "companion_file_name": csv_file_name,
-            "companion_s3_bucket": csv_s3_bucket,
-            "companion_s3_key": csv_s3_key,
+            "companion_file_name": primary_file_name,
+            "companion_s3_bucket": primary_s3_bucket,
+            "companion_s3_key": primary_s3_key,
         }
 
-        csv_data_source_id = _insert_data_source_row(
+        primary_data_source_id = _insert_data_source_row(
             connection,
-            name=csv_file_name,
-            data_source_type="csv",
+            name=primary_file_name,
+            data_source_type=primary_data_source_type,
             created_by_user_id=created_by_user_id,
-            metadata=csv_data_source_metadata,
+            metadata=primary_data_source_metadata,
         )
 
         json_data_source_id = _insert_data_source_row(
@@ -362,15 +376,15 @@ def stage_data_sources(event, body, connection):
             metadata=json_data_source_metadata,
         )
 
-        csv_ingestion_run_id = _insert_ingestion_run_row(
+        primary_ingestion_run_id = _insert_ingestion_run_row(
             connection,
-            data_source_row_id=csv_data_source_id,
+            data_source_row_id=primary_data_source_id,
             status="pending",
             metadata={
-                "source": "staged_csv_file",
+                "source": f"staged_{primary_source_label}_file",
                 "action": "awaiting_sync",
-                "s3_bucket": csv_s3_bucket,
-                "s3_key": csv_s3_key,
+                "s3_bucket": primary_s3_bucket,
+                "s3_key": primary_s3_key,
             },
         )
 
@@ -392,12 +406,12 @@ def stage_data_sources(event, body, connection):
             event,
             200,
             {
-                "message": "CSV and metadata JSON staged successfully.",
-                "action": "staged_csv_and_metadata",
-                "type": "csv",
+                "message": f"{primary_source_label.capitalize()} and metadata JSON staged successfully.",
+                "action": f"staged_{primary_source_label}_and_metadata",
+                "type": source_type,
                 "created_by": created_by,
-                "staged_data_source_ids": [csv_data_source_id, json_data_source_id],
-                "pending_ingestion_run_ids": [csv_ingestion_run_id, json_ingestion_run_id],
+                "staged_data_source_ids": [primary_data_source_id, json_data_source_id],
+                "pending_ingestion_run_ids": [primary_ingestion_run_id, json_ingestion_run_id],
             },
         )
 
