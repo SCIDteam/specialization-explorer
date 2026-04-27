@@ -1030,7 +1030,18 @@ export class ApiGatewayStack extends cdk.Stack {
 
     // --- Bedrock Input Guardrail ---
     const guardrailConfig = {
-      piiEntities: ['NAME', 'PHONE', 'EMAIL', 'ADDRESS'],
+      piiEntities: [
+        // General
+        'ADDRESS', 'AGE', 'NAME', 'EMAIL', 'PHONE', 'USERNAME', 'PASSWORD',
+        'DRIVER_ID', 'LICENSE_PLATE', 'VEHICLE_IDENTIFICATION_NUMBER',
+        // Finance
+        'CREDIT_DEBIT_CARD_CVV', 'CREDIT_DEBIT_CARD_EXPIRY', 'CREDIT_DEBIT_CARD_NUMBER',
+        'PIN', 'INTERNATIONAL_BANK_ACCOUNT_NUMBER', 'SWIFT_CODE',
+        // IT
+        'IP_ADDRESS', 'MAC_ADDRESS', 'URL',
+        // Canada
+        'CA_HEALTH_NUMBER', 'CA_SOCIAL_INSURANCE_NUMBER',
+      ],
       piiInputAction: 'ANONYMIZE',
       piiInputEnabled: true,
       promptAttackStrength: 'HIGH',
@@ -1043,10 +1054,31 @@ export class ApiGatewayStack extends cdk.Stack {
       blockedOutputsMessaging: 'Response blocked.',
       sensitiveInformationPolicyConfig: {
         piiEntitiesConfig: [
-          { type: 'NAME',    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
-          { type: 'PHONE',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
-          { type: 'EMAIL',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
-          { type: 'ADDRESS', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          // General
+          { type: 'ADDRESS',                    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'AGE',                        action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'NAME',                       action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'EMAIL',                      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'PHONE',                      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'USERNAME',                   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'PASSWORD',                   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'DRIVER_ID',                  action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'LICENSE_PLATE',              action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'VEHICLE_IDENTIFICATION_NUMBER', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          // Finance
+          { type: 'CREDIT_DEBIT_CARD_CVV',      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'CREDIT_DEBIT_CARD_EXPIRY',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'CREDIT_DEBIT_CARD_NUMBER',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'PIN',                        action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'INTERNATIONAL_BANK_ACCOUNT_NUMBER', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'SWIFT_CODE',                 action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          // IT
+          { type: 'IP_ADDRESS',                 action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'MAC_ADDRESS',                action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'URL',                        action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          // Canada
+          { type: 'CA_HEALTH_NUMBER',           action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+          { type: 'CA_SOCIAL_INSURANCE_NUMBER', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
         ],
       },
       contentPolicyConfig: {

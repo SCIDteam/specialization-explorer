@@ -35,7 +35,7 @@ You do NOT need to read this document to perform a standard deployment — the C
 
 The guardrail in this project is an **input-only** guardrail applied before any LLM call. It handles two distinct cases:
 
-- **PII anonymization** (NAME, PHONE, EMAIL, ADDRESS): the message is NOT blocked — PII is masked and the anonymized text is passed to the LLM
+- **PII anonymization** (see full list below): the message is NOT blocked — PII is masked and the anonymized text is passed to the LLM
 - **Prompt injection blocking** (PROMPT_ATTACK): the request IS blocked — the LLM is never called and a denial message is returned to the user
 
 No output guardrail is applied. The guardrail only runs on user input.
@@ -60,7 +60,18 @@ Key snippet from `cdk/lib/api-stack.ts`:
 ```typescript
 // --- Bedrock Input Guardrail ---
 const guardrailConfig = {
-  piiEntities: ['NAME', 'PHONE', 'EMAIL', 'ADDRESS'],
+  piiEntities: [
+    // General
+    'ADDRESS', 'AGE', 'NAME', 'EMAIL', 'PHONE', 'USERNAME', 'PASSWORD',
+    'DRIVER_ID', 'LICENSE_PLATE', 'VEHICLE_IDENTIFICATION_NUMBER',
+    // Finance
+    'CREDIT_DEBIT_CARD_CVV', 'CREDIT_DEBIT_CARD_EXPIRY', 'CREDIT_DEBIT_CARD_NUMBER',
+    'PIN', 'INTERNATIONAL_BANK_ACCOUNT_NUMBER', 'SWIFT_CODE',
+    // IT
+    'IP_ADDRESS', 'MAC_ADDRESS', 'URL',
+    // Canada
+    'CA_HEALTH_NUMBER', 'CA_SOCIAL_INSURANCE_NUMBER',
+  ],
   piiInputAction: 'ANONYMIZE',
   piiInputEnabled: true,
   promptAttackStrength: 'HIGH',
@@ -73,10 +84,31 @@ const inputGuardrail = new bedrock.CfnGuardrail(this, 'InputGuardrail', {
   blockedOutputsMessaging: 'Response blocked.',
   sensitiveInformationPolicyConfig: {
     piiEntitiesConfig: [
-      { type: 'NAME',    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
-      { type: 'PHONE',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
-      { type: 'EMAIL',   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
-      { type: 'ADDRESS', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      // General
+      { type: 'ADDRESS',                       action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'AGE',                           action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'NAME',                          action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'EMAIL',                         action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'PHONE',                         action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'USERNAME',                      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'PASSWORD',                      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'DRIVER_ID',                     action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'LICENSE_PLATE',                 action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'VEHICLE_IDENTIFICATION_NUMBER', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      // Finance
+      { type: 'CREDIT_DEBIT_CARD_CVV',         action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'CREDIT_DEBIT_CARD_EXPIRY',      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'CREDIT_DEBIT_CARD_NUMBER',      action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'PIN',                           action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'INTERNATIONAL_BANK_ACCOUNT_NUMBER', action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'SWIFT_CODE',                    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      // IT
+      { type: 'IP_ADDRESS',                    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'MAC_ADDRESS',                   action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'URL',                           action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      // Canada
+      { type: 'CA_HEALTH_NUMBER',              action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
+      { type: 'CA_SOCIAL_INSURANCE_NUMBER',    action: 'ANONYMIZE', inputAction: 'ANONYMIZE', inputEnabled: true },
     ],
   },
   contentPolicyConfig: {
@@ -176,7 +208,16 @@ The Lambda also requires `bedrock:InvokeModel` and `bedrock:InvokeModelWithRespo
 ## Configuration
 
 The guardrail is configured in `api-stack.ts` with:
-- **PII detection (ANONYMIZE):** NAME, PHONE, EMAIL, ADDRESS — these are masked in the user message, not blocked. The LLM receives the anonymized version.
+
+- **PII detection (ANONYMIZE):** All detected PII is masked in the user message before it reaches the LLM. The full set of covered entities:
+
+  | Category | Entities |
+  |----------|----------|
+  | General  | ADDRESS, AGE, NAME, EMAIL, PHONE, USERNAME, PASSWORD, DRIVER_ID, LICENSE_PLATE, VEHICLE_IDENTIFICATION_NUMBER |
+  | Finance  | CREDIT_DEBIT_CARD_CVV, CREDIT_DEBIT_CARD_EXPIRY, CREDIT_DEBIT_CARD_NUMBER, PIN, INTERNATIONAL_BANK_ACCOUNT_NUMBER, SWIFT_CODE |
+  | IT       | IP_ADDRESS, MAC_ADDRESS, URL |
+  | Canada   | CA_HEALTH_NUMBER, CA_SOCIAL_INSURANCE_NUMBER |
+
 - **Prompt attack filter:** `PROMPT_ATTACK` with `inputStrength: HIGH`, `outputStrength: NONE` — prompt injection attempts are blocked before reaching the LLM.
 - **`blockedInputMessaging`:** Friendly redirect message shown to the user when a prompt injection is detected.
 
@@ -295,7 +336,7 @@ Note: `guardrailVersion` in the Lambda environment is set to the pinned version 
 
 - **Bedrock LLM / Foundation model:** Pretrained large language models offered through Amazon Bedrock, such as Claude Haiku or Claude Sonnet. These are the models the runtime invokes to generate text.
 - **Guardrail:** A Bedrock configuration that contains policy-based rules to filter, block, or transform prompts based on content policy and sensitive information rules.
-- **PII (Personally Identifiable Information):** Sensitive personal data that could identify an individual (e.g., names, email addresses, phone numbers, addresses). In this project, PII is **anonymized** (masked) rather than blocked — the request continues to the LLM with redacted text.
+- **PII (Personally Identifiable Information):** Sensitive personal data that could identify an individual. This project anonymizes a broad set of PII types across general (name, email, phone, address, age, username, password, driver ID, license plate, VIN), financial (card numbers, CVV, expiry, PIN, IBAN, SWIFT code), IT (IP address, MAC address, URL), and Canada-specific (health number, SIN) categories. PII is **anonymized** (masked) rather than blocked — the request continues to the LLM with redacted text.
 - **Prompt injection:** An attack where a user attempts to override the system prompt or manipulate the model's behavior through crafted input. This is the only case where the guardrail **blocks** the request entirely.
 - **L1 construct (CDK):** Low-level CDK constructs that map directly to CloudFormation resources. `CfnGuardrail` is used to create the Bedrock guardrail resource at the CloudFormation level.
 - **CfnGuardrailVersion:** A CDK construct that creates a pinned, immutable version of a guardrail. Used here to ensure the Lambda always calls a stable, known version.
