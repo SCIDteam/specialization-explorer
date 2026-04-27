@@ -27,7 +27,7 @@ export class AmplifyStack extends cdk.Stack {
 
     const githubRepoName = props.githubRepo;
 
-    const amplifyYaml = yaml.parse(` 
+    const amplifyYaml = yaml.parse(`
       version: 1
       applications:
         - appRoot: frontend
@@ -100,25 +100,47 @@ export class AmplifyStack extends cdk.Stack {
     // -- UPDATE THE SSM PARAMETER TO POINT TO THE AMPLIFY APP URL --
     const amplifyUrl = `https://${branch}.${amplifyApp.appId}.amplifyapp.com`;
 
-    new cdk.custom_resources.AwsCustomResource(this, 'UpdateSSMParameter', {
+    // Read the current SSM parameter value
+    const existingAllowedOriginsRaw = cdk.aws_ssm.StringParameter.valueForStringParameter(
+      this,
+      props.allowedOriginsParamName
+    );
+
+    // Merge existing origins + amplify URL, dedupe, normalize
+    const mergedAllowedOrigins = Array.from(
+      new Set(
+        existingAllowedOriginsRaw
+          .split(",")
+          .map((origin) => origin.trim().replace(/\/$/, ""))
+          .filter((origin) => origin.length > 0)
+          .concat(amplifyUrl.replace(/\/$/, ""))
+      )
+    );
+
+    const mergedAllowedOriginsValue = mergedAllowedOrigins.join(",");
+
+    // Update SSM parameter with merged list
+    new cdk.custom_resources.AwsCustomResource(this, "UpdateSSMAllowedOrigins", {
       onCreate: {
-        service: 'SSM',
-        action: 'putParameter',
+        service: "SSM",
+        action: "putParameter",
         parameters: {
           Name: props.allowedOriginsParamName,
-          Value: amplifyUrl,
-          Type: 'String',
-          Overwrite: true, // This allows the update
+          Value: mergedAllowedOriginsValue,
+          Type: "String",
+          Overwrite: true,
         },
-        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of('UpdateSSMParam'),
+        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of(
+          "UpdateSSMAllowedOrigins"
+        ),
       },
       onUpdate: {
-        service: 'SSM',
-        action: 'putParameter',
+        service: "SSM",
+        action: "putParameter",
         parameters: {
           Name: props.allowedOriginsParamName,
-          Value: amplifyUrl,
-          Type: 'String',
+          Value: mergedAllowedOriginsValue,
+          Type: "String",
           Overwrite: true,
         },
       },
@@ -129,32 +151,35 @@ export class AmplifyStack extends cdk.Stack {
       }),
     });
 
-    // --- UPDATE THE S3 Bucket Allowed Origin --- 
-    const corsConfig = JSON.stringify({
-      CORSRules: [{
-        AllowedHeaders: ['*'],
-        AllowedMethods: ['GET', 'PUT', 'POST', 'DELETE'],
-        AllowedOrigins: [amplifyUrl],
-        ExposeHeaders: ['ETag'],
-      }],
-    });
+    const corsConfig = {
+      CORSRules: [
+        {
+          AllowedHeaders: ["*"],
+          AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"],
+          AllowedOrigins: mergedAllowedOrigins,
+          ExposeHeaders: ["ETag"],
+        },
+      ],
+    };
 
-    new cdk.custom_resources.AwsCustomResource(this, 'UpdateS3BucketCors', {
+    new cdk.custom_resources.AwsCustomResource(this, "UpdateS3BucketCors", {
       onCreate: {
-        service: 'S3',
-        action: 'putBucketCors',
+        service: "S3",
+        action: "putBucketCors",
         parameters: {
           Bucket: props.knowledgeBaseBucketName,
-          CORSConfiguration: JSON.parse(corsConfig),
+          CORSConfiguration: corsConfig,
         },
-        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of('UpdateS3BucketCors'),
+        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of(
+          "UpdateS3BucketCors"
+        ),
       },
       onUpdate: {
-        service: 'S3',
-        action: 'putBucketCors',
+        service: "S3",
+        action: "putBucketCors",
         parameters: {
           Bucket: props.knowledgeBaseBucketName,
-          CORSConfiguration: JSON.parse(corsConfig),
+          CORSConfiguration: corsConfig,
         },
       },
       policy: cdk.custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
