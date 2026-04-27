@@ -2,9 +2,10 @@ import { Card, CardContent } from "@/components/ui/card";
 
 type UserChatMessageProps = {
   text: string;
+  hasPII?: boolean;
 };
 
-export default function UserChatMessage({ text }: UserChatMessageProps) {
+export default function UserChatMessage({ text, hasPII }: UserChatMessageProps) {
   return (
     // main msg container
     <div className="flex flex-col items-end gap-1 group">
@@ -15,6 +16,11 @@ export default function UserChatMessage({ text }: UserChatMessageProps) {
           </CardContent>
         </Card>
       </div>
+      {hasPII && (
+        <p className="text-xs text-amber-500 pr-1">
+          Your message may contain personal information. It will be redacted before saving.
+        </p>
+      )}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { detectPII } from "@coffeeandfun/remove-pii";
 
 import AIChatMessage from "@/components/ChatInterface/AIChatMessage";
 import UserChatMessage from "@/components/ChatInterface/UserChatMessage";
@@ -590,6 +591,7 @@ export default function AIChatPage() {
       sender: "user",
       text,
       time: Date.now(),
+      hasPII: detectPII(text).hasPII,
     };
 
     // Create bot message placeholder for streaming
@@ -738,6 +740,7 @@ export default function AIChatPage() {
         <UserChatMessage
           key={message.id}
           text={message.text}
+          hasPII={message.hasPII}
         />
       );
     } else {
