@@ -70,7 +70,7 @@ The left sidebar lists all previous chat sessions. Users can start a new chat wi
 
 Administrators log in via Cognito and access the admin dashboard from the header. The sidebar provides navigation between four sections: Dashboard, System Settings, Analytics, and Chat History.
 
-If the administrator has just been given access, they will not have the mode dragdown option on the top right. They will manually have to add `/admin/login` to the URL to login for the first time. After this, they will be able to see the mode dragdown option and will seamlessly be able to switch between the student and administrator view.
+If the administrator has just been given access, they will not have the mode dragdown option on the top right. They will manually have to add `/admin/login` to the end of the URL to login for the first time. After this, they will be able to see the mode dragdown option and will seamlessly be able to switch between the student and administrator view.
 
 ![image](./media/admin-log-in.png)
 
