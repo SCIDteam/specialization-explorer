@@ -105,7 +105,7 @@ The Analytics page shows time-series charts for users, chat sessions, and questi
 
 ### System Settings
 
-The System Settings page controls global platform behavior and AI prompt configuration.
+The System Settings page controls global platform behaviour and AI prompt configuration.
 
 ![image](./media/admin-system-settings.png)
 
