@@ -147,7 +147,7 @@ These messages appear in the interface but are not sent to the AI model. They in
 
 #### Message Versioning
 
-Each system message supports full version history. Admins can navigate between versions using Prev/Next or the version chips, activate an older version to roll back, or delete unused versions.
+Each system message supports full version history. Admins can navigate between versions using Prev/Next or the version chips, activate an older version, or delete unused versions.
 
 ![image](./media/admin-message-versioning.png)
 
