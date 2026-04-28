@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   Search,
   Upload,
-  Trash2,
   RefreshCw,
   FileText,
   Users,
@@ -844,9 +843,9 @@ export default function DataSourceManagement() {
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-2xl">
                   <DialogHeader>
-                    <DialogTitle>Upload Alumni Data</DialogTitle>
+                    <DialogTitle>Upload Data</DialogTitle>
                     <DialogDescription>
-                      Upload the <span className="font-medium">CSV</span> or <span className="font-medium">mardown</span> and its corresponding{" "}
+                      Upload the <span className="font-medium">CSV</span> or <span className="font-medium">markdown</span> and its corresponding{" "}
                       <span className="font-medium">metadata JSON</span>. These files will be staged for the next sync.
                     </DialogDescription>
                   </DialogHeader>
@@ -894,15 +893,6 @@ export default function DataSourceManagement() {
                                 <FileText className="h-5 w-5 text-primary flex-shrink-0" />
                                 <span className="text-sm font-medium truncate">{primaryFile.name}</span>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-gray-500 hover:text-red-600"
-                                onClick={() => setPrimaryFile(null)}
-                                disabled={uploading}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
                             </div>
                             <div className="text-xs text-gray-500">{formatSizeMb(primaryFile)}</div>
                           </div>
@@ -950,15 +940,6 @@ export default function DataSourceManagement() {
                                 <FileText className="h-5 w-5 text-primary flex-shrink-0" />
                                 <span className="text-sm font-medium truncate">{metadataFile.name}</span>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 w-6 p-0 text-gray-500 hover:text-red-600"
-                                onClick={() => setMetadataFile(null)}
-                                disabled={uploading}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
                             </div>
                             <div className="text-xs text-gray-500">{formatSizeMb(metadataFile)}</div>
                           </div>
@@ -1007,14 +988,14 @@ export default function DataSourceManagement() {
                       </div>
 
                       <div className="text-gray-500">
-                        <p className="font-medium mb-1 text-gray-700">Required CSV Columns:</p>
+                        <p className="font-medium mb-1 text-gray-700">Required CSV Columns for Alumni Data:</p>
                         <code className="bg-gray-100 px-1 py-0.5 rounded">
                           Profile, Headline, Year, Degree
                         </code>
                       </div>
 
                       <div className="text-gray-500">
-                        <p className="font-medium mb-1 text-gray-700">Metadata JSON should include:</p>
+                        <p className="font-medium mb-1 text-gray-700">Metadata JSON for Alumni Data should include:</p>
                         <code className="bg-gray-100 px-1 py-0.5 rounded">
                           size_bytes, storage_class, schema_version, columns, source
                         </code>
@@ -1084,13 +1065,12 @@ export default function DataSourceManagement() {
                   <TableHead className="w-[12%]">Status</TableHead>
                   <TableHead className="w-[16%]">Uploaded</TableHead>
                   <TableHead className="w-[16%]">Completed</TableHead>
-                  <TableHead className="w-[8%] text-right">Delete</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="py-10">
+                    <TableCell colSpan={5} className="py-10">
                       <div className="flex items-center justify-center gap-2 text-gray-500">
                         <Loader2 className="h-4 w-4 animate-spin" />
                         <span>Loading data sources...</span>
@@ -1099,7 +1079,7 @@ export default function DataSourceManagement() {
                   </TableRow>
                 ) : pagedDataSources.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-10 text-gray-500">
+                    <TableCell colSpan={5} className="text-center py-10 text-gray-500">
                       No data sources found.
                     </TableCell>
                   </TableRow>
@@ -1155,23 +1135,11 @@ export default function DataSourceManagement() {
                           <TableCell className="align-top text-sm text-gray-700">
                             {formatDateTime(run?.completed_at ?? null)}
                           </TableCell>
-
-                          <TableCell className="align-top text-right">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-red-500"
-                              disabled
-                              title="Delete (mock)"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
                         </TableRow>
 
                         {isOpen ? (
                           <TableRow key={`${ds.id}-sub`}>
-                            <TableCell colSpan={6} className="bg-gray-50/70">
+                            <TableCell colSpan={5} className="bg-gray-50/70">
                               {ds.type === "website" ? (
                                 <div className="space-y-3">
                                   <div className="text-sm font-medium text-gray-800">
@@ -1233,7 +1201,7 @@ export default function DataSourceManagement() {
 
                                         {json ? (
                                           <div className="rounded-lg border border-gray-200 bg-white overflow-hidden">
-                                            <div className="grid grid-cols-[45%_10%_12%_16%_16%_8%] gap-0 text-sm items-start">
+                                            <div className="grid grid-cols-[45%_10%_12%_16%_17%] gap-0 text-sm items-start">
                                               <div className="px-3 py-3 border-r border-gray-100 min-w-0">
                                                 <div className="font-medium text-gray-900 break-all">
                                                   {json.name}
@@ -1254,18 +1222,6 @@ export default function DataSourceManagement() {
 
                                               <div className="px-3 py-3 border-r border-gray-100 text-xs text-gray-700">
                                                 {formatDateTime(jsonRun?.completed_at ?? null)}
-                                              </div>
-
-                                              <div className="px-3 py-3 text-right">
-                                                <Button
-                                                  variant="ghost"
-                                                  size="icon"
-                                                  className="h-8 w-8 text-red-500"
-                                                  disabled
-                                                  title="Delete (mock)"
-                                                >
-                                                  <Trash2 className="h-4 w-4" />
-                                                </Button>
                                               </div>
                                             </div>
                                           </div>
