@@ -32,19 +32,19 @@ Users are immediately greeted with a welcome message and prompted to start a new
 
 ### Anonymous Pop-up
 
-If the user has not signed in, a pop-up may appear explaining the anonymous session behavior.
+If the user has not signed in, a pop-up may appear explaining the anonymous session behaviour.
 
 ![image](./media/anonymous-pop-up.png)
 
 ### Chat Interface
 
-Each new chat starts with the assistant greeting the student and asking a series of questions to learn about their interests, study preferences, and goals. Once it has enough to go on, it switches to making recommendations.
+Each new chat starts with the assistant greeting the user and asking a series of questions to learn about their interests, study preferences, and goals. Once it has enough to go on, it switches to making recommendations.
 
 ![image](./media/first-interaction.png)
 
 ### Specialization Details
 
-After a recommendation is made, users can ask follow-up questions. The assistant can provide course requirements, averages, and other program details sourced from the knowledge base.
+After a recommendation is made, users can ask follow-up questions. The assistant can provide specialization course requirements, averages, and other program details sourced from the knowledge base.
 
 ![image](./media/requirements-averages.png)
 
