@@ -120,8 +120,10 @@ export default function AIChatMessage({
             </div>
           )}
           {displayContent && (
-            <div className="text-xs text-muted-foreground pl-4 border-l-2 border-muted/50 ml-[5px] mt-1 italic">
-              "{displayContent}"
+            <div className="text-xs text-muted-foreground pl-4 border-l-2 border-muted/50 ml-[5px] mt-1">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                {displayContent}
+              </ReactMarkdown>
             </div>
           )}
         </div>

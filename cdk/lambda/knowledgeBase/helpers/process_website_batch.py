@@ -358,8 +358,12 @@ def _build_updated_web_config(data_source: dict, new_urls: list[str], include_pa
 
     updated_crawler_config = dict(crawler_config)
 
-    effective_includes = include_patterns if include_patterns else crawler_config.get("inclusionFilters")
-    effective_excludes = exclude_patterns if exclude_patterns else crawler_config.get("exclusionFilters")
+    effective_includes = list(dict.fromkeys(
+        (crawler_config.get("inclusionFilters") or []) + (include_patterns or [])
+    )) or None
+    effective_excludes = list(dict.fromkeys(
+        (crawler_config.get("exclusionFilters") or []) + (exclude_patterns or [])
+    )) or None
 
     if effective_includes:
         updated_crawler_config["inclusionFilters"] = effective_includes
