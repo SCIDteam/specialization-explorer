@@ -6,6 +6,7 @@ This prototype explores how Large Language Models (LLMs) and Retrieval-Augmented
 | [High Level Architecture](#high-level-architecture) | High level overview illustrating component interactions |
 | [Deployment](#deployment-guide) | How to deploy the project |
 | [User Guide](#user-guide) | The working solution |
+| [Knowledge Base](#knowledge-base) | How the project uses Bedrock Knowledge Bases |
 | [Directories](#directories) | General project directory structure |
 | [Additional Documentation](#additional-documentation) | Comprehensive guides and references |
 | [Credits](#credits) | Meet the team behind the solution |
@@ -24,6 +25,10 @@ To deploy this solution, please follow the steps laid out in the [Deployment Gui
 ## User Guide
 
 Please refer to the [Web App User Guide](Docs/USER_GUIDE.md) for instructions on navigating the web app interface.
+
+## Knowledge Base
+
+Please refer to [Knowledge Base Documentation](docs/KNOWLEDGE_BASE_DOCUMENTATION.md) as it explains how the project uses Bedrock Knowledges Bases. This includes the data source state machine, S3 and website ingestion phases, scheduler polling, retry behavior, and admin dashboard integration.
 
 ## Directories
 

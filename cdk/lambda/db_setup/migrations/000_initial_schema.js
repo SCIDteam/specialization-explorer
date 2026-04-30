@@ -99,26 +99,6 @@ exports.up = (pgm) => {
       created_at timestamptz DEFAULT now()
     );
 
-    -- Session Feedback
-    CREATE TABLE IF NOT EXISTS session_feedback (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      chat_session_id uuid NOT NULL,
-      user_id uuid,
-      rating int,
-      comment text,
-      created_at timestamptz DEFAULT now()
-    );
-
-    -- Analytics Events
-    CREATE TABLE IF NOT EXISTS analytics_events (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      event_type varchar(128) NOT NULL,
-      user_id uuid,
-      chat_session_id uuid,
-      properties jsonb DEFAULT '{}',
-      created_at timestamptz DEFAULT now()
-    );
-
     -- System Messages (allows rollback)
     CREATE TABLE IF NOT EXISTS system_messages (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -254,8 +234,6 @@ exports.up = (pgm) => {
     -- ==============================
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_session_id ON chat_messages(chat_session_id);
-    CREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON analytics_events(user_id);
-    CREATE INDEX IF NOT EXISTS idx_analytics_events_chat_session_id ON analytics_events(chat_session_id);
     CREATE INDEX IF NOT EXISTS idx_ingestion_runs_data_source_id ON ingestion_runs(data_source_id);
 
     -- Make system_messages seeding idempotent
@@ -286,30 +264,6 @@ exports.up = (pgm) => {
     DO $$ BEGIN
       ALTER TABLE chat_messages
         ADD CONSTRAINT fk_chat_messages_chat_session_id
-        FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE session_feedback
-        ADD CONSTRAINT fk_session_feedback_chat_session_id
-        FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE session_feedback
-        ADD CONSTRAINT fk_session_feedback_user_id
-        FOREIGN KEY (user_id) REFERENCES users(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE analytics_events
-        ADD CONSTRAINT fk_analytics_events_user_id
-        FOREIGN KEY (user_id) REFERENCES users(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE analytics_events
-        ADD CONSTRAINT fk_analytics_events_chat_session_id
         FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id);
     EXCEPTION WHEN duplicate_object THEN null; END $$;
 
@@ -574,8 +528,6 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.sql(`
-    DROP TABLE IF EXISTS analytics_events CASCADE;
-    DROP TABLE IF EXISTS session_feedback CASCADE;
     DROP TABLE IF EXISTS chat_messages CASCADE;
     DROP TABLE IF EXISTS chat_sessions CASCADE;
     DROP TABLE IF EXISTS system_settings CASCADE;
