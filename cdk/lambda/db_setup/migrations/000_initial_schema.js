@@ -15,11 +15,11 @@ exports.up = (pgm) => {
     EXCEPTION WHEN duplicate_object THEN null; END $$;
 
     DO $$ BEGIN
-      CREATE TYPE data_source_type AS ENUM ('website', 'csv', 'json');
+      CREATE TYPE data_source_type AS ENUM ('website', 'csv', 'markdown', 'json');
     EXCEPTION WHEN duplicate_object THEN null; END $$;
 
     DO $$ BEGIN
-      CREATE TYPE ingestion_status AS ENUM ('running', 'failed', 'completed');
+      CREATE TYPE ingestion_status AS ENUM ('pending', 'queued', 'running', 'failed', 'completed');
     EXCEPTION WHEN duplicate_object THEN null; END $$;
 
     DO $$ BEGIN
@@ -50,8 +50,8 @@ exports.up = (pgm) => {
       role user_role NOT NULL,
       created_at timestamptz DEFAULT now(),
       last_seen_at timestamptz,
-      tokens_used bigint DEFAULT 0,
-      token_window_started_at timestamptz NOT NULL DEFAULT now(),
+      messages_sent bigint DEFAULT 0,
+      messages_window_started_at timestamptz NOT NULL DEFAULT now(),
       metadata jsonb DEFAULT '{}'
     );
 
@@ -74,7 +74,7 @@ exports.up = (pgm) => {
       status ingestion_status NOT NULL,
       error_message text,
       created_at timestamptz DEFAULT now(),
-      completed_at timestamptz
+      completed_at timestamptz,
       metadata jsonb DEFAULT '{}'
     );
 
@@ -99,26 +99,6 @@ exports.up = (pgm) => {
       created_at timestamptz DEFAULT now()
     );
 
-    -- Session Feedback
-    CREATE TABLE IF NOT EXISTS session_feedback (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      chat_session_id uuid NOT NULL,
-      user_id uuid,
-      rating int,
-      comment text,
-      created_at timestamptz DEFAULT now()
-    );
-
-    -- Analytics Events
-    CREATE TABLE IF NOT EXISTS analytics_events (
-      id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      event_type varchar(128) NOT NULL,
-      user_id uuid,
-      chat_session_id uuid,
-      properties jsonb DEFAULT '{}',
-      created_at timestamptz DEFAULT now()
-    );
-
     -- System Messages (allows rollback)
     CREATE TABLE IF NOT EXISTS system_messages (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -135,7 +115,7 @@ exports.up = (pgm) => {
     -- System Settings
     CREATE TABLE IF NOT EXISTS system_settings (
       id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
-      daily_token_limit int DEFAULT 10000,
+      max_messages_per_day int DEFAULT 45,
       min_messages_before_suggest int DEFAULT 4,
       max_characters_per_user_message int DEFAULT 2000,
       max_characters_per_ai_message int DEFAULT 5000,
@@ -254,8 +234,6 @@ exports.up = (pgm) => {
     -- ==============================
     CREATE INDEX IF NOT EXISTS idx_chat_sessions_user_id ON chat_sessions(user_id);
     CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_session_id ON chat_messages(chat_session_id);
-    CREATE INDEX IF NOT EXISTS idx_analytics_events_user_id ON analytics_events(user_id);
-    CREATE INDEX IF NOT EXISTS idx_analytics_events_chat_session_id ON analytics_events(chat_session_id);
     CREATE INDEX IF NOT EXISTS idx_ingestion_runs_data_source_id ON ingestion_runs(data_source_id);
 
     -- Make system_messages seeding idempotent
@@ -290,30 +268,6 @@ exports.up = (pgm) => {
     EXCEPTION WHEN duplicate_object THEN null; END $$;
 
     DO $$ BEGIN
-      ALTER TABLE session_feedback
-        ADD CONSTRAINT fk_session_feedback_chat_session_id
-        FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE session_feedback
-        ADD CONSTRAINT fk_session_feedback_user_id
-        FOREIGN KEY (user_id) REFERENCES users(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE analytics_events
-        ADD CONSTRAINT fk_analytics_events_user_id
-        FOREIGN KEY (user_id) REFERENCES users(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
-      ALTER TABLE analytics_events
-        ADD CONSTRAINT fk_analytics_events_chat_session_id
-        FOREIGN KEY (chat_session_id) REFERENCES chat_sessions(id);
-    EXCEPTION WHEN duplicate_object THEN null; END $$;
-
-    DO $$ BEGIN
       ALTER TABLE system_messages
         ADD CONSTRAINT fk_system_messages_created_by
         FOREIGN KEY (created_by) REFERENCES users(id);
@@ -329,7 +283,7 @@ exports.up = (pgm) => {
     -- SEED: system_settings (single default row)
     -- ==============================
     INSERT INTO system_settings (
-      daily_token_limit,
+      max_messages_per_day,
       min_messages_before_suggest,
       max_characters_per_user_message,
       max_characters_per_ai_message,
@@ -344,7 +298,7 @@ exports.up = (pgm) => {
       updated_at
     )
     SELECT
-      10000,
+      45,
       4,
       2000,
       5000,
@@ -574,8 +528,6 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.sql(`
-    DROP TABLE IF EXISTS analytics_events CASCADE;
-    DROP TABLE IF EXISTS session_feedback CASCADE;
     DROP TABLE IF EXISTS chat_messages CASCADE;
     DROP TABLE IF EXISTS chat_sessions CASCADE;
     DROP TABLE IF EXISTS system_settings CASCADE;

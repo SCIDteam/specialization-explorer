@@ -1,6 +1,5 @@
 import json
 import logging
-import time
 from urllib.parse import urlparse
 
 import boto3
@@ -10,17 +9,6 @@ from requests_aws4auth import AWS4Auth
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-MAX_FORBIDDEN_RETRY_WINDOW_SECONDS = 5 * 60
-FORBIDDEN_RETRY_SLEEP_SECONDS = 15
-INDEX_STABILIZE_MAX_WINDOW_SECONDS = 3 * 60
-INDEX_STABILIZE_POLL_SECONDS = 10
-INDEX_STABILIZE_EXTRA_DELAY_SECONDS = 20
-
-
-def sleep(seconds: int) -> None:
-    time.sleep(seconds)
-
-
 def normalize_endpoint(endpoint: str) -> str:
     trimmed = str(endpoint or "").strip()
     if not trimmed:
@@ -28,7 +16,6 @@ def normalize_endpoint(endpoint: str) -> str:
     if not trimmed.startswith("https://") and not trimmed.startswith("http://"):
         trimmed = f"https://{trimmed}"
     return trimmed.rstrip("/")
-
 
 def build_client(endpoint: str, region: str) -> OpenSearch:
     session = boto3.Session()
@@ -62,7 +49,6 @@ def build_client(endpoint: str, region: str) -> OpenSearch:
         max_retries=0,
     )
 
-
 def error_message(error: Exception) -> str:
     info = getattr(error, "info", None)
     if isinstance(info, str):
@@ -74,23 +60,17 @@ def error_message(error: Exception) -> str:
             return str(info)
     return str(error)
 
-
 def is_index_already_exists(error_text: str) -> bool:
     text = error_text.lower()
     return "resource_already_exists_exception" in text or "already exists" in text
 
+def get_index_body(props: dict) -> dict:
+    vector_field = props.get("VectorField")
+    text_field = props.get("TextField")
+    metadata_field = props.get("MetadataField")
+    dimensions = int(props.get("Dimensions", 1024))
 
-def ensure_index_with_propagation(client: OpenSearch, props: dict) -> None:
-    index_name = props["indexName"]
-    vector_field = props["vectorField"]
-    text_field = props["textField"]
-    metadata_field = props["metadataField"]
-    dimensions = int(props["dimensions"])
-
-    deadline = time.time() + MAX_FORBIDDEN_RETRY_WINDOW_SECONDS
-    attempt = 0
-
-    body = {
+    return {
         "settings": {
             "index": {
                 "knn": True
@@ -118,142 +98,85 @@ def ensure_index_with_propagation(client: OpenSearch, props: dict) -> None:
         }
     }
 
-    while time.time() < deadline:
-        attempt += 1
-
-        try:
-            if client.indices.exists(index=index_name):
-                logger.info("Index '%s' already exists. Skipping create.", index_name)
-                return
-
-            client.indices.create(index=index_name, body=body)
-            logger.info("Index '%s' created successfully on attempt %s.", index_name, attempt)
-            return
-        except exceptions.TransportError as error:
-            status_code = getattr(error, "status_code", 0)
-            text = error_message(error)
-            lowered = text.lower()
-            transient_auth_or_readiness = (
-                status_code in (401, 403, 429, 500, 502, 503, 504)
-                or "forbidden" in lowered
-                or "authentication" in lowered
-                or "unauthorized" in lowered
-            )
-
-            if is_index_already_exists(text):
-                logger.info("Index '%s' already exists (race condition). Treating as success.", index_name)
-                return
-
-            if transient_auth_or_readiness:
-                seconds_left = max(0, int(deadline - time.time()))
-                logger.warning(
-                    "Attempt %s received transient auth/readiness error (status=%s). "
-                    "Waiting %ss for AOSS policy propagation/readiness. Remaining retry window: %ss. Error: %s",
-                    attempt,
-                    status_code,
-                    FORBIDDEN_RETRY_SLEEP_SECONDS,
-                    seconds_left,
-                    text,
-                )
-                sleep(FORBIDDEN_RETRY_SLEEP_SECONDS)
-                continue
-
-            raise
-
-    raise RuntimeError(
-        f"Timed out after 5 minutes waiting for AOSS policy propagation while creating index '{index_name}'."
-    )
-
-
-def wait_for_index_stabilization(client: OpenSearch, index_name: str) -> None:
-    deadline = time.time() + INDEX_STABILIZE_MAX_WINDOW_SECONDS
-    attempt = 0
-
-    while time.time() < deadline:
-        attempt += 1
-        try:
-            exists = client.indices.exists(index=index_name)
-            if not exists:
-                logger.info("Index stabilization attempt %s: index not visible yet.", attempt)
-                sleep(INDEX_STABILIZE_POLL_SECONDS)
-                continue
-
-            client.indices.get(index=index_name)
-            logger.info(
-                "Index '%s' is visible and retrievable. Applying final delay for Bedrock consistency.",
-                index_name,
-            )
-            sleep(INDEX_STABILIZE_EXTRA_DELAY_SECONDS)
-            return
-        except exceptions.TransportError as error:
-            status_code = getattr(error, "status_code", 0)
-            text = error_message(error).lower()
-            transient = (
-                status_code in (401, 403, 404, 429, 500, 502, 503, 504)
-                or "no such index" in text
-                or "forbidden" in text
-                or "authentication" in text
-                or "unauthorized" in text
-            )
-
-            if transient:
-                logger.info(
-                    "Index stabilization attempt %s: status=%s, waiting for AOSS data-plane consistency.",
-                    attempt,
-                    status_code,
-                )
-                sleep(INDEX_STABILIZE_POLL_SECONDS)
-                continue
-
-            raise
-
-    raise RuntimeError(f"Timed out waiting for index '{index_name}' to become visible to downstream services.")
-
-
 def handler(event, context):
-    logger.info("VectorIndexManager event: %s", json.dumps(event))
+    logger.info("Received event: %s", json.dumps(event))
+    
+    # CDK Async Provider adds "IsCompleteChain" or passes back "Data" when polling.
+    # We can determine if this is the initial invocation or a polling invocation.
+    is_polling = "IsCompleteChain" in event or "Data" in event
+    
+    if is_polling:
+        return handle_is_complete(event)
+    else:
+        return handle_on_event(event)
 
+def handle_on_event(event):
+    logger.info("Executing onEvent phase")
     request_type = event.get("RequestType")
-    existing_physical_id = event.get("PhysicalResourceId") or "vector-index-custom-resource"
-
-    if request_type == "Delete":
-        return {
-            "PhysicalResourceId": existing_physical_id,
-            "Data": {
-                "SkippedDelete": "true"
-            }
-        }
-
     props = event.get("ResourceProperties") or {}
-    endpoint = normalize_endpoint(props.get("CollectionEndpoint"))
-    region = props.get("Region")
     index_name = props.get("IndexName")
+    
+    if not index_name:
+        raise ValueError("IndexName is required resource property")
 
-    if not region or not index_name:
-        raise ValueError("Region and IndexName are required resource properties")
+    existing_physical_id = event.get("PhysicalResourceId")
+    physical_resource_id = existing_physical_id if existing_physical_id else f"{index_name}-vector-index"
 
-    client = build_client(endpoint, region)
-
-    ensure_index_with_propagation(
-        client,
-        {
-            "indexName": index_name,
-            "vectorField": props.get("VectorField"),
-            "textField": props.get("TextField"),
-            "metadataField": props.get("MetadataField"),
-            "dimensions": int(props.get("Dimensions")),
-        },
-    )
-
-    wait_for_index_stabilization(client, index_name)
-
-    physical_resource_id = existing_physical_id
-    if existing_physical_id == "vector-index-custom-resource":
-        physical_resource_id = f"{index_name}-vector-index"
-
+    # We do not block or sleep here. We acknowledge the request and pass to the polling phase.
     return {
         "PhysicalResourceId": physical_resource_id,
         "Data": {
-            "IndexName": index_name
+            "IndexName": index_name,
+            "Phase": "Polling" # Custom flag to guarantee we know it's the polling phase next time
         }
     }
+
+def handle_is_complete(event):
+    logger.info("Executing isComplete phase")
+    request_type = event.get("RequestType")
+    
+    if request_type == "Delete":
+        return {"IsComplete": True}
+
+    props = event.get("ResourceProperties") or {}
+    endpoint = props.get("CollectionEndpoint")
+    region = props.get("Region")
+    index_name = props.get("IndexName")
+
+    client = build_client(endpoint, region)
+    body = get_index_body(props)
+
+    try:
+        if client.indices.exists(index=index_name):
+            client.indices.get(index=index_name)
+            logger.info("Index '%s' is visible, readable, and ready.", index_name)
+            return {"IsComplete": True}
+
+        logger.info("Attempting to create index '%s'...", index_name)
+        client.indices.create(index=index_name, body=body)
+        
+        logger.info("Index '%s' created successfully. Forcing one more polling cycle for stabilization.", index_name)
+        return {"IsComplete": False}
+
+    except exceptions.TransportError as error:
+        status_code = getattr(error, "status_code", 0)
+        text = error_message(error).lower()
+        
+        if is_index_already_exists(text):
+            logger.info("Caught race condition: Index already exists. Stabilizing next cycle.")
+            return {"IsComplete": False}
+
+        transient_auth_or_readiness = (
+            status_code in (401, 403, 404, 429, 500, 502, 503, 504)
+            or "forbidden" in text
+            or "authentication" in text
+            or "unauthorized" in text
+            or "no such index" in text
+        )
+
+        if transient_auth_or_readiness:
+            logger.warning("Transient error (status=%s). Waiting for AOSS policy propagation. Error: %s", status_code, text)
+            return {"IsComplete": False}
+
+        logger.error("Non-transient error encountered: %s", text)
+        raise

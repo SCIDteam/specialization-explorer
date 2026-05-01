@@ -93,7 +93,7 @@ export class DatabaseStack extends Stack {
         }),
         description: "Empty parameter group",
         parameters: {
-          "rds.force_ssl": "0",
+          "rds.force_ssl": "1",
         },
       }
     );
@@ -123,6 +123,8 @@ export class DatabaseStack extends Stack {
       allocatedStorage: 100,
       maxAllocatedStorage: 150,
       allowMajorVersionUpgrade: false,
+      enablePerformanceInsights: true,
+      performanceInsightRetention: rds.PerformanceInsightRetention.DEFAULT,
       autoMinorVersionUpgrade: true,
       backupRetention: Duration.days(7),
       deleteAutomatedBackups: true,
@@ -198,7 +200,7 @@ export class DatabaseStack extends Stack {
       vpc: vpcStack.vpc,
       role: rdsProxyRole,
       securityGroups: this.dbInstance.connections.securityGroups,
-      requireTLS: false,
+      requireTLS: true,
     });
 
     rdsProxy.node.addDependency(serviceLinkedRole);

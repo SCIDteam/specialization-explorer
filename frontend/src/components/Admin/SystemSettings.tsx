@@ -33,7 +33,7 @@ import type {
 } from "@/components/Admin/SystemMessageEditor";
 
 type SystemSettingsDTO = {
-  daily_token_limit: number;
+  max_messages_per_day: number;
   min_messages_before_suggest: number;
   max_characters_per_user_message: number;
   max_characters_per_ai_message: number;
@@ -51,7 +51,7 @@ type SystemSettingsDTO = {
 type SystemSettingsAPIResponse = Partial<SystemSettingsDTO>;
 
 const DEFAULT_SETTINGS: SystemSettingsDTO = {
-  daily_token_limit: 10000,
+  max_messages_per_day: 45,
   min_messages_before_suggest: 4,
   max_characters_per_user_message: 2000,
   max_characters_per_ai_message: 5000,
@@ -409,7 +409,7 @@ function PromptAssemblyCard({
     <Card className="border-gray-200 shadow-sm">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Route className="h-5 w-5 text-[#2c5f7c]" />
+          <Route className="h-5 w-5 text-primary" />
           How the Prompt Is Built
         </CardTitle>
         <CardDescription>
@@ -424,7 +424,7 @@ function PromptAssemblyCard({
             <Button
               type="button"
               variant={phase === "DETECTIVE" ? "default" : "ghost"}
-              className={phase === "DETECTIVE" ? "bg-[#2c5f7c] hover:bg-[#234d63]" : ""}
+              className={phase === "DETECTIVE" ? "bg-primary hover:bg-primary/90" : ""}
               onClick={() => setPhase("DETECTIVE")}
             >
               Detective Phase
@@ -432,7 +432,7 @@ function PromptAssemblyCard({
             <Button
               type="button"
               variant={phase === "SUGGESTION" ? "default" : "ghost"}
-              className={phase === "SUGGESTION" ? "bg-[#2c5f7c] hover:bg-[#234d63]" : ""}
+              className={phase === "SUGGESTION" ? "bg-primary hover:bg-primary/90" : ""}
               onClick={() => setPhase("SUGGESTION")}
             >
               Suggestion Phase
@@ -539,8 +539,8 @@ export default function SystemSettings() {
       const data: SystemSettingsAPIResponse = await res.json();
 
       setSettings({
-        daily_token_limit:
-          data.daily_token_limit ?? DEFAULT_SETTINGS.daily_token_limit,
+        max_messages_per_day:
+          data.max_messages_per_day ?? DEFAULT_SETTINGS.max_messages_per_day,
         min_messages_before_suggest:
           data.min_messages_before_suggest ?? DEFAULT_SETTINGS.min_messages_before_suggest,
         max_characters_per_user_message:
@@ -601,7 +601,7 @@ export default function SystemSettings() {
       if (!adminEmail) throw new Error("Missing admin email (not authenticated?)");
 
       const payload = {
-        daily_token_limit: settings.daily_token_limit,
+        max_messages_per_day: settings.max_messages_per_day,
         min_messages_before_suggest: settings.min_messages_before_suggest,
         max_characters_per_user_message: settings.max_characters_per_user_message,
         max_characters_per_ai_message: settings.max_characters_per_ai_message,
@@ -784,7 +784,7 @@ export default function SystemSettings() {
       <Card className="border-gray-200 shadow-sm">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-[#2c5f7c]" />
+            <Bot className="h-5 w-5 text-primary" />
             System Settings
           </CardTitle>
           <CardDescription>
@@ -801,26 +801,28 @@ export default function SystemSettings() {
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#2c5f7c]" />
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
-                  <Label htmlFor="daily-token-limit">Daily Token Limit</Label>
+                  <Label htmlFor="max-messages-per-day">Max messages per day</Label>
                   <Input
-                    id="daily-token-limit"
+                    id="max-messages-per-day"
                     type="number"
                     min={1}
-                    value={settings.daily_token_limit}
+                    value={settings.max_messages_per_day}
                     onChange={(e) =>
                       setSettings((s) => ({
                         ...s,
-                        daily_token_limit: Number(e.target.value),
+                        max_messages_per_day: Number(e.target.value),
                       }))
                     }
                   />
-                  <p className="text-xs text-gray-500">Number of tokens a user can send to the LLM per 24 hours. 1 token is roughly 1.33 words</p>
+                  <p className="text-xs text-gray-500">
+                    Maximum number of messages a user can send in a 24 hour window
+                  </p>
                 </div>
 
                 <div className="space-y-2">
@@ -922,7 +924,7 @@ export default function SystemSettings() {
                   >
                     <div className="flex flex-col space-y-1.5">
                       <h3 className="font-semibold leading-none tracking-tight flex items-center gap-2">
-                        <List className="h-5 w-5 text-[#2c5f7c]" />
+                        <List className="h-5 w-5 text-primary" />
                         Specializations
                       </h3>
                       <p className="text-sm text-muted-foreground">
@@ -1155,7 +1157,7 @@ export default function SystemSettings() {
                 <Button
                   onClick={handleSaveSystemSettings}
                   disabled={saving}
-                  className="bg-[#2c5f7c] hover:bg-[#234d63]"
+                  className="bg-primary hover:bg-primary/90"
                 >
                   <Save className="mr-2 h-4 w-4" />
                   {saving ? "Saving..." : "Save Changes"}
@@ -1195,7 +1197,7 @@ export default function SystemSettings() {
           <div className="space-y-4">
             <div>
               <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-[#2c5f7c]" />
+                <Sparkles className="h-5 w-5 text-primary" />
                 Messages That Affect Text Generation
               </h4>
               <p className="text-sm text-gray-500 mt-1">
@@ -1229,7 +1231,7 @@ export default function SystemSettings() {
           <div className="border-t border-gray-200 pt-8 space-y-4">
             <div>
               <h4 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Eye className="h-5 w-5 text-[#2c5f7c]" />
+                <Eye className="h-5 w-5 text-primary" />
                 Messages That Do Not Affect Text Generation
               </h4>
               <p className="text-sm text-gray-500 mt-1">

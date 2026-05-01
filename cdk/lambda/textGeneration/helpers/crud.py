@@ -63,7 +63,7 @@ def ensure_user_exists(db_connection, user_id: str) -> None:
             dummy_email = f"user_{user_id[:8]}@example.com" 
             cur.execute(
                 """
-                INSERT INTO users (id, email, display_name, role, created_at, last_seen_at, tokens_used, token_window_started_at, metadata)
+                INSERT INTO users (id, email, display_name, role, created_at, last_seen_at, messages_sent, messages_window_started_at, metadata)
                 VALUES (%s, %s, %s, %s, NOW(), NOW(), 0, NOW(), '{}'::jsonb)
                 ON CONFLICT (id) DO NOTHING
                 """,
@@ -144,7 +144,7 @@ def fetch_system_config(db_connection) -> Dict[str, Any]:
         # Fetch System Settings
         with db_connection.cursor() as cur:
             cur.execute("""
-                SELECT daily_token_limit,
+                SELECT max_messages_per_day,
                        min_messages_before_suggest,
                        max_characters_per_user_message,
                        max_characters_per_ai_message,
@@ -162,7 +162,7 @@ def fetch_system_config(db_connection) -> Dict[str, Any]:
             row = cur.fetchone()
             if row:
                 config['settings'] = {
-                    'daily_token_limit': row[0],
+                    'max_messages_per_day': row[0],
                     'min_messages_before_suggest': row[1],
                     'max_characters_per_user_message': row[2],
                     'max_characters_per_ai_message': row[3],

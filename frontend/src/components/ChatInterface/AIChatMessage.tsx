@@ -4,9 +4,18 @@ import { ChevronDown, ChevronUp, BookOpen, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeRaw from "rehype-raw";
 import rehypeHighlight from "rehype-highlight";
+import rehypeSanitize from "rehype-sanitize";
 import TypingIndicator from "./TypingIndicator";
+
+const isSafeUrl = (url: string) => {
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol);
+  } catch {
+    return false;
+  }
+};
 
 type AIChatMessageProps = {
   text: string;
@@ -40,7 +49,7 @@ export default function AIChatMessage({
               <span className="font-medium text-xs">Source link:</span>
             </div>
             <a
-              href={urlMatch[0]}
+              href={isSafeUrl(urlMatch[0]) ? urlMatch[0] : "#"}
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary hover:underline hover:text-primary/80 transition-colors break-words pl-4 text-xs"
@@ -76,11 +85,6 @@ export default function AIChatMessage({
     if (source && typeof source === "object") {
       const { uri, url, content, type } = source;
       const displayUrl = url || uri;
-      // const displayContent = content
-      //   ? content.length > 200
-      //     ? content.substring(0, 200) + "..."
-      //     : content
-      //   : "";
       const displayContent = content || "";
       const isWeb = type === "WEB" || (displayUrl && displayUrl.startsWith("http"));
 
@@ -95,7 +99,7 @@ export default function AIChatMessage({
               )}
               {isWeb ? (
                 <a
-                  href={displayUrl}
+                  href={isSafeUrl(displayUrl) ? displayUrl : "#"}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary hover:underline hover:text-primary/80 transition-colors text-xs font-medium break-all"
@@ -111,8 +115,10 @@ export default function AIChatMessage({
             </div>
           )}
           {displayContent && (
-            <div className="text-xs text-muted-foreground pl-4 border-l-2 border-muted/50 ml-[5px] mt-1 italic">
-              "{displayContent}"
+            <div className="text-xs text-muted-foreground pl-4 border-l-2 border-muted/50 ml-[5px] mt-1">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
+                {displayContent}
+              </ReactMarkdown>
             </div>
           )}
         </div>
@@ -131,7 +137,7 @@ export default function AIChatMessage({
           ) : (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              rehypePlugins={[rehypeRaw, rehypeHighlight]}
+              rehypePlugins={[rehypeSanitize, rehypeHighlight]}
               components={{
                 // Headers
                 h1: ({ ...props }) => (
@@ -165,6 +171,7 @@ export default function AIChatMessage({
                 a: ({ ...props }) => (
                   <a
                     {...props}
+                    href={props.href && isSafeUrl(props.href) ? props.href : "#"}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary hover:underline"
@@ -295,7 +302,7 @@ export default function AIChatMessage({
 
           {!isTyping && warning && (
             <div className="mt-4">
-              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-200">
+              <div className="rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-800 dark:border-orange-900/50 dark:bg-orange-950/40 dark:text-orange-200">
                 {warning}
               </div>
             </div>

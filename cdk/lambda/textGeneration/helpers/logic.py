@@ -14,21 +14,18 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int, s
 
     # 2. Set mode based on history
     if exchange_count < config.MIN_EXCHANGES_BEFORE_SUGGEST:
-        phase_instructions = config.DETECTIVE_PHASE_PROMPT
+        phase_instructions = f"<phase>\n{config.DETECTIVE_PHASE_PROMPT}\n</phase>"
         retrieval_count = 5
         phase_name = "DETECTIVE"
+        model_arn = config.HAIKU_ARN
     else:
-        phase_instructions = config.SUGGESTION_PHASE_PROMPT
-        retrieval_count = 50
+        phase_instructions = f"<phase>\n{config.SUGGESTION_PHASE_PROMPT}\n</phase>"
+        retrieval_count = 15
         phase_name = "SUGGESTION"
-
-    full_prompt = f"""<role>
+        model_arn = config.SONNET_ARN
+    static_prompt = f"""<role>
 {config.ROLE}
 </role>
-
-<phase>
-{phase_instructions}
-</phase>
 
 <checklist>
 {config.CHECKLIST}
@@ -47,4 +44,4 @@ def get_current_prompt(chat_session_id: str, db_connection) -> Tuple[str, int, s
 </guardrails>
 """.strip()
 
-    return full_prompt, retrieval_count, phase_name
+    return static_prompt, retrieval_count, phase_name, phase_instructions, model_arn

@@ -1,4 +1,5 @@
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -36,15 +37,10 @@ const initConnection = async () => {
   }
 };
 
-const createResponse = () => ({
-  statusCode: 200,
-  headers: {
-    "Access-Control-Allow-Headers":
-      "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-  },
-  body: "",
+const createResponse = async (event) => ({
+    statusCode: 200,
+    headers: await getCorsHeaders(event),
+    body: "",
 });
 
 const parseBody = (body) => {
@@ -62,7 +58,7 @@ const handleError = (error, response) => {
 };
 
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
   let data;
 
   try {
@@ -80,13 +76,7 @@ exports.handler = async (event) => {
         const body = parseBody(event.body);
 
         // Default role is student
-        const role = body.role || "student";
-        if (!["student", "admin"].includes(role)) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Invalid role" });
-          break;
-        }
-
+        const role = "student";
         const userId = crypto.randomUUID();
         const email = body.email || null;
         const displayName = body.display_name || body.displayName || null;
@@ -137,7 +127,7 @@ exports.handler = async (event) => {
 
         const user = await sqlConnection`
           SELECT id, email, display_name, role, created_at, last_seen_at,
-                tokens_used, token_window_started_at, metadata
+                messages_sent, messages_window_started_at, metadata
           FROM users
           WHERE id = ${userId}
         `;
@@ -226,8 +216,8 @@ exports.handler = async (event) => {
               role,
               created_at,
               last_seen_at,
-              tokens_used,
-              token_window_started_at,
+              messages_sent,
+              messages_window_started_at,
               metadata
           `;
 
@@ -325,373 +315,6 @@ exports.handler = async (event) => {
         response.body = JSON.stringify(data);
         break;
       }
-
-      case "POST /user_sessions/{session_id}/interactions":
-        const sessionId2 = event.pathParameters?.session_id;
-        if (!sessionId2) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Session ID is required" });
-          break;
-        }
-
-        // Validate user session by primary key
-        const userSession2 = await sqlConnection`
-          SELECT id FROM user_sessions WHERE id = ${sessionId2}
-        `;
-
-        if (userSession2.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "User session not found" });
-          break;
-        }
-
-        const userSessionId2 = userSession2[0].id;
-        const createData = parseBody(event.body);
-        const {
-          chat_session_id,
-          sender_role,
-          query_text,
-          response_text,
-          message_meta,
-          source_chunks,
-          order_index,
-        } = createData;
-
-        if (!sender_role) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "sender_role is required" });
-          break;
-        }
-
-        if (!chat_session_id) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "chat_session_id is required",
-          });
-          break;
-        }
-
-        // Ensure the chat session belongs to the provided user session
-        const chatSessionCheck = await sqlConnection`
-          SELECT id FROM chat_sessions WHERE id = ${chat_session_id} AND user_session_id = ${userSessionId2}
-        `;
-        if (chatSessionCheck.length === 0) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Invalid chat_session_id for this session",
-          });
-          break;
-        }
-
-        const newInteraction = await sqlConnection`
-          INSERT INTO user_interactions (chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, order_index)
-          VALUES (${chat_session_id}, ${sender_role}, ${query_text || null}, ${response_text || null
-          }, ${message_meta || {}}, ${source_chunks || []}, ${order_index || null
-          })
-          RETURNING id, chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, created_at, order_index
-        `;
-
-        response.statusCode = 201;
-        data = {
-          ...newInteraction[0],
-          session_id: newInteraction[0].chat_session_id,
-        };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "GET /interactions/{interaction_id}":
-        const interactionId = event.pathParameters?.interaction_id;
-        if (!interactionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Interaction ID is required",
-          });
-          break;
-        }
-
-        const interaction = await sqlConnection`
-          SELECT id, chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, created_at, order_index
-          FROM user_interactions
-          WHERE id = ${interactionId}
-        `;
-
-        if (interaction.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Interaction not found" });
-          break;
-        }
-
-        data = {
-          ...interaction[0],
-          session_id: interaction[0].chat_session_id,
-        };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "PUT /interactions/{interaction_id}":
-        const updateInteractionId = event.pathParameters?.interaction_id;
-        if (!updateInteractionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Interaction ID is required",
-          });
-          break;
-        }
-
-        const updateData = parseBody(event.body);
-        const {
-          sender_role: updateSenderRole,
-          query_text: updateQueryText,
-          response_text: updateResponseText,
-          message_meta: updateMessageMeta,
-          source_chunks: updateSourceChunks,
-          order_index: updateOrderIndex,
-        } = updateData;
-
-        const updated = await sqlConnection`
-          UPDATE user_interactions 
-          SET sender_role = ${updateSenderRole}, query_text = ${updateQueryText}, response_text = ${updateResponseText}, 
-              message_meta = ${updateMessageMeta || {}}, source_chunks = ${updateSourceChunks || []
-          }, order_index = ${updateOrderIndex}
-          WHERE id = ${updateInteractionId}
-          RETURNING id, chat_session_id, sender_role, query_text, response_text, message_meta, source_chunks, created_at, order_index
-        `;
-
-        if (updated.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Interaction not found" });
-          break;
-        }
-
-        data = { ...updated[0], session_id: updated[0].chat_session_id };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "DELETE /interactions/{interaction_id}":
-        const deleteInteractionId = event.pathParameters?.interaction_id;
-        if (!deleteInteractionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({
-            error: "Interaction ID is required",
-          });
-          break;
-        }
-
-        const deleted = await sqlConnection`
-          DELETE FROM user_interactions WHERE id = ${deleteInteractionId} RETURNING id
-        `;
-
-        if (deleted.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Interaction not found" });
-          break;
-        }
-
-        response.statusCode = 204;
-        response.body = "";
-        break;
-
-      case "GET /user_sessions/{session_id}/analytics":
-        const analyticsSessionId = event.pathParameters?.session_id;
-        if (!analyticsSessionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Session ID is required" });
-          break;
-        }
-
-        // Validate user session by primary key
-        const userSessionAnalytics = await sqlConnection`
-          SELECT id FROM user_sessions WHERE id = ${analyticsSessionId}
-        `;
-
-        if (userSessionAnalytics.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "User session not found" });
-          break;
-        }
-
-        const userSessionAnalyticsId = userSessionAnalytics[0].id;
-        const analyticsLimit = Math.min(
-          parseInt(event.queryStringParameters?.limit) || 20,
-          100
-        );
-        const analyticsOffset =
-          parseInt(event.queryStringParameters?.offset) || 0;
-
-        const analyticsResult = await sqlConnection`
-          SELECT 
-            id, user_session_id, event_type, properties, created_at,
-            COUNT(*) OVER() as total_count
-          FROM analytics_events
-          WHERE user_session_id = ${userSessionAnalyticsId}
-          ORDER BY created_at DESC
-          LIMIT ${analyticsLimit} OFFSET ${analyticsOffset}
-        `;
-
-        const analyticsTotal =
-          analyticsResult.length > 0
-            ? parseInt(analyticsResult[0].total_count)
-            : 0;
-        const analytics = analyticsResult.map(
-          ({ total_count, ...event }) => event
-        );
-
-        data = {
-          analytics,
-          pagination: {
-            limit: analyticsLimit,
-            offset: analyticsOffset,
-            total: analyticsTotal,
-            hasMore: analyticsOffset + analyticsLimit < analyticsTotal,
-          },
-        };
-        response.body = JSON.stringify(data);
-        break;
-
-      case "POST /user_sessions/{session_id}/analytics":
-        const createAnalyticsSessionId = event.pathParameters?.session_id;
-        if (!createAnalyticsSessionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Session ID is required" });
-          break;
-        }
-
-        // Validate user session by primary key
-        const userSessionCreate = await sqlConnection`
-          SELECT id FROM user_sessions WHERE id = ${createAnalyticsSessionId}
-        `;
-
-        if (userSessionCreate.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "User session not found" });
-          break;
-        }
-
-        const userSessionCreateId = userSessionCreate[0].id;
-        const analyticsData = parseBody(event.body);
-        const { event_type, properties } = analyticsData;
-
-        if (!event_type) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "event_type is required" });
-          break;
-        }
-
-        const newAnalytics = await sqlConnection`
-          INSERT INTO analytics_events (user_session_id, event_type, properties)
-          VALUES (${userSessionCreateId}, ${event_type}, ${properties || {}})
-          RETURNING id, user_session_id, event_type, properties, created_at
-        `;
-
-        response.statusCode = 201;
-        data = newAnalytics[0];
-        response.body = JSON.stringify(data);
-        break;
-
-      case "GET /analytics/{analytics_id}":
-        const analyticsId = event.pathParameters?.analytics_id;
-        if (!analyticsId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Analytics ID is required" });
-          break;
-        }
-
-        const analyticsEvent = await sqlConnection`
-          SELECT id, user_session_id, event_type, properties, created_at
-          FROM analytics_events
-          WHERE id = ${analyticsId}
-        `;
-
-        if (analyticsEvent.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
-          break;
-        }
-
-        data = analyticsEvent[0];
-        response.body = JSON.stringify(data);
-        break;
-
-      case "PUT /analytics/{analytics_id}":
-        const updateAnalyticsId = event.pathParameters?.analytics_id;
-        if (!updateAnalyticsId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Analytics ID is required" });
-          break;
-        }
-
-        const updateAnalyticsData = parseBody(event.body);
-        const { event_type: updateEventType, properties: updateProperties } =
-          updateAnalyticsData;
-
-        const updatedAnalytics = await sqlConnection`
-          UPDATE analytics_events 
-          SET event_type = ${updateEventType}, properties = ${updateProperties || {}
-          }
-          WHERE id = ${updateAnalyticsId}
-          RETURNING id, user_session_id, event_type, properties, created_at
-        `;
-
-        if (updatedAnalytics.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
-          break;
-        }
-
-        data = updatedAnalytics[0];
-        response.body = JSON.stringify(data);
-        break;
-
-      case "DELETE /analytics/{analytics_id}":
-        const deleteAnalyticsId = event.pathParameters?.analytics_id;
-        if (!deleteAnalyticsId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "Analytics ID is required" });
-          break;
-        }
-
-        const deletedAnalytics = await sqlConnection`
-          DELETE FROM analytics_events WHERE id = ${deleteAnalyticsId} RETURNING id
-        `;
-
-        if (deletedAnalytics.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({
-            error: "Analytics event not found",
-          });
-          break;
-        }
-
-        response.statusCode = 204;
-        response.body = "";
-        break;
-
-      // GET /public/config/userGuidelines - Public endpoint to fetch user guidelines
-      case "GET /public/config/userGuidelines":
-        try {
-          const guidelinesResult = await sqlConnection`
-            SELECT value FROM system_settings WHERE key = 'user_guidelines'
-          `;
-
-          const userGuidelines =
-            guidelinesResult.length > 0 ? guidelinesResult[0].value : "";
-
-          response.statusCode = 200;
-          response.body = JSON.stringify({
-            userGuidelines: userGuidelines,
-          });
-        } catch (error) {
-          console.error("Error getting user guidelines:", error);
-          response.statusCode = 500;
-          response.body = JSON.stringify({
-            error: "Failed to get user guidelines",
-          });
-        }
-        break;
 
       default:
         throw new Error(`Unsupported route: "${pathData}"`);

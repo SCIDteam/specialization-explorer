@@ -1,10 +1,13 @@
 import os
 import json
+from helpers.cors import get_cors_headers
 import boto3
 import logging
 import psycopg2
 
-from helpers.add_website import add_website
+from helpers.stage_data_sources import stage_data_sources
+from helpers.start_ingestion_job import start_ingestion_job
+from helpers.generate_presigned_url import generate_presigned_url
 from helpers.update_status import update_status
 
 # Set up logging
@@ -13,8 +16,7 @@ logger.setLevel(logging.INFO)
 
 # Environment variables
 DB_SECRET_NAME = os.environ["SM_DB_CREDENTIALS"]
-# TODO: will be an evironment variable passed in from API stack with Knowledge Base stack is completed
-KB_SECRET_NAME = "SpecEx/KnowledgeBase/Id/playground"
+KB_SECRET_NAME = os.environ["KB_SECRET_NAME"]
 REGION = os.environ["REGION"]
 RDS_PROXY_ENDPOINT = os.environ["RDS_PROXY_ENDPOINT"]
 
@@ -51,7 +53,8 @@ def _connect_to_db():
                 'user': db_secret["username"],
                 'password': db_secret["password"],
                 'host': RDS_PROXY_ENDPOINT,
-                'port': db_secret["port"]
+                'port': db_secret["port"], 
+                'sslmode': 'require'
             }
             connection_string = " ".join([f"{key}={value}" for key, value in connection_params.items()])
             connection = psycopg2.connect(connection_string)
@@ -64,18 +67,15 @@ def _connect_to_db():
             raise
     return connection
 
-def _response(status_code: int, body: dict):
+def _response(event, status_code: int, body: dict):
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Methods": "*",
+            **get_cors_headers(event),
         },
         "body": json.dumps(body),
     }
-
 
 def _parse_body(event):
     body = {}
@@ -97,7 +97,6 @@ def _parse_body(event):
 
     return body
 
-
 def handler(event, context=None):
     logger.info("Event: %s", json.dumps(event))
 
@@ -108,7 +107,7 @@ def handler(event, context=None):
                 connection = _connect_to_db()
             except Exception as e:
                 logger.error(f"Error connecting to database: {e}")
-                return _response(500, {"error": "Error connecting to database"})
+                return _response(event, 500, {"error": "Error connecting to database"})
 
             return update_status(event=event, connection=connection)
 
@@ -117,33 +116,53 @@ def handler(event, context=None):
         resource = event.get("resource", "")
         path = event.get("path", "")
 
+        # Route: GET /admin/generate-presigned-url
+        if method == "GET" and (
+            resource == "/admin/generate-presigned-url"
+            or path.endswith("/admin/generate-presigned-url")
+        ):
+            return generate_presigned_url(event=event)
+
         try:
             body = _parse_body(event)
         except ValueError as e:
-            return _response(400, {"error": str(e)})
+            return _response(event, 400, {"error": str(e)})
         
         # connect to database
         try:
             connection = _connect_to_db()
         except Exception as e:
             logger.error(f"Error connecting to database: {e}")
-            return _response(500, {"error": "Error connecting to database"})
-        
-        # get knowledge base ID
+            return _response(event, 500, {"error": "Error connecting to database"})
+
+        # Route: POST /admin/data_sources
+        if method == "POST" and (
+            resource == "/admin/data_sources"
+            or path.endswith("/admin/data_sources")
+        ):
+            return stage_data_sources(event=event, body=body, connection=connection)
+
+        # Everything below this point needs KB ID
         try:
             kb_id = _get_secret(KB_SECRET_NAME, expect_json=False)
         except Exception as e:
             logger.error(f"Error getting knowledge base ID: {e}")
-            return _response(500, {"error": "Error getting knowledge base ID"})
+            return _response(event, 500, {"error": "Error getting knowledge base ID"})
 
-        # Route: POST /admin/data_sources/website
+        # Route: POST /admin/data_sources/sync
         if method == "POST" and (
-            resource == "/admin/data_sources/website"
-            or path.endswith("/admin/data_sources/website")
+            resource == "/admin/data_sources/sync"
+            or path.endswith("/admin/data_sources/sync")
         ):
-            return add_website(event=event, body=body, connection=connection, kb_id=kb_id)
+            return start_ingestion_job(
+                event=event,
+                body=body,
+                connection=connection,
+                kb_id=kb_id,
+            )
 
         return _response(
+            event,
             404,
             {
                 "error": "Route not found",
@@ -155,4 +174,4 @@ def handler(event, context=None):
 
     except Exception as e:
         logger.error("Error: %s", e, exc_info=True)
-        return _response(500, {"error": "Internal server error"})
+        return _response(event, 500, {"error": "Internal server error"})

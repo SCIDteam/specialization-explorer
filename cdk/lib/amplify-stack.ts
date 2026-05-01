@@ -12,6 +12,8 @@ import { ApiGatewayStack } from "./api-stack";
 interface AmplifyStackProps extends cdk.StackProps {
   githubRepo: string;
   githubBranch?: string;
+  knowledgeBaseBucketName: string;
+  allowedOriginsParamName: string;
 }
 
 export class AmplifyStack extends cdk.Stack {
@@ -25,7 +27,7 @@ export class AmplifyStack extends cdk.Stack {
 
     const githubRepoName = props.githubRepo;
 
-    const amplifyYaml = yaml.parse(` 
+    const amplifyYaml = yaml.parse(`
       version: 1
       applications:
         - appRoot: frontend
@@ -95,5 +97,53 @@ export class AmplifyStack extends cdk.Stack {
       amplifyApp.addBranch(branch);
     }
 
+    // -- UPDATE THE SSM PARAMETER TO POINT TO THE AMPLIFY APP URL --
+    const amplifyUrl = `https://${branch}.${amplifyApp.appId}.amplifyapp.com`;
+
+    // Set the allowed origins to the Amplify URL.
+    // To add additional origins (e.g. custom domains), update the SSM parameter manually.
+    // See Docs/DEPLOYMENT_GUIDE.md for instructions.
+    new cdk.custom_resources.AwsCustomResource(this, "UpdateSSMAllowedOrigins", {
+      onCreate: {
+        service: "SSM",
+        action: "putParameter",
+        parameters: {
+          Name: props.allowedOriginsParamName,
+          Value: amplifyUrl,
+          Type: "String",
+          Overwrite: true,
+        },
+        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of("UpdateSSMAllowedOrigins"),
+      },
+      policy: cdk.custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter${props.allowedOriginsParamName}`,
+        ],
+      }),
+    });
+
+    new cdk.custom_resources.AwsCustomResource(this, "UpdateS3BucketCors", {
+      onCreate: {
+        service: "S3",
+        action: "putBucketCors",
+        parameters: {
+          Bucket: props.knowledgeBaseBucketName,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                AllowedHeaders: ["*"],
+                AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"],
+                AllowedOrigins: [amplifyUrl],
+                ExposeHeaders: ["ETag"],
+              },
+            ],
+          },
+        },
+        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of("UpdateS3BucketCors"),
+      },
+      policy: cdk.custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: [`arn:aws:s3:::${props.knowledgeBaseBucketName}`],
+      }),
+    });
   }
 }

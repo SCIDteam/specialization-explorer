@@ -11,6 +11,7 @@
  */
 
 const postgres = require("postgres");
+const { getCorsHeaders } = require("./utils/cors.js");
 const {
   SecretsManagerClient,
   GetSecretValueCommand,
@@ -47,15 +48,10 @@ const initConnection = async () => {
   }
 };
 
-const createResponse = () => ({
-  statusCode: 200,
-  headers: {
-    "Access-Control-Allow-Headers":
-      "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-  },
-  body: "",
+const createResponse = async (event) => ({
+    statusCode: 200,
+    headers: await getCorsHeaders(event),
+    body: "",
 });
 
 const parseBody = (body) => {
@@ -78,10 +74,16 @@ const handleError = (error, response) => {
  * @returns {Object} HTTP response object with statusCode, headers, and body
  */
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
+
+  const callerRole = event.requestContext?.authorizer?.role;
+  if (callerRole !== 'admin') {
+    response.statusCode = 403;
+    response.body = JSON.stringify({ error: 'Admin access required' });
+    return response;
+  }
 
   // Ensure database connection is ready
-  await initConnection();
   await initConnection();
 
   let data; // Variable to store response data
@@ -148,8 +150,8 @@ exports.handler = async (event) => {
             role,
             created_at,
             last_seen_at,
-            tokens_used,
-            token_window_started_at,
+            messages_sent,
+            messages_window_started_at,
             metadata
         `;
 
@@ -255,11 +257,10 @@ exports.handler = async (event) => {
           break;
         }
 
-        // Validate adminEmail
-        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        const adminEmail = event.requestContext?.authorizer?.email;
         if (!adminEmail) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "adminEmail is required" });
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -273,7 +274,7 @@ exports.handler = async (event) => {
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -438,11 +439,10 @@ exports.handler = async (event) => {
           break;
         }
 
-        // validate
-        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        const adminEmail = event.requestContext?.authorizer?.email;
         if (!adminEmail) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "adminEmail is required" });
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -456,7 +456,7 @@ exports.handler = async (event) => {
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -584,11 +584,10 @@ exports.handler = async (event) => {
           break;
         }
 
-        // validate
-        const adminEmail = typeof body?.adminEmail === "string" ? body.adminEmail.trim() : "";
+        const adminEmail = event.requestContext?.authorizer?.email;
         if (!adminEmail) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "adminEmail is required" });
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
@@ -602,7 +601,7 @@ exports.handler = async (event) => {
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -966,7 +965,7 @@ exports.handler = async (event) => {
           )
           SELECT
             latest.id,
-            latest.daily_token_limit,
+            latest.max_messages_per_day,
             latest.min_messages_before_suggest,
             latest.max_characters_per_user_message,
             latest.max_characters_per_ai_message,
@@ -985,7 +984,7 @@ exports.handler = async (event) => {
 
         // But keep a safe fallback to avoid crashing UI.
         const fallback = {
-          daily_token_limit: 10000,
+          max_messages_per_day: 45,
           min_messages_before_suggest: 4,
           max_characters_per_user_message: 2000,
           max_characters_per_ai_message: 5000,
@@ -1008,7 +1007,7 @@ exports.handler = async (event) => {
       case "GET /admin/users": {
         try {
           const qs = event.queryStringParameters ?? {};
-          const limit = parseInt(qs.limit ?? "50", 10);
+          const limit = Math.min(parseInt(qs.limit ?? "50", 10), 100); // cap limit to 100
           const offset = parseInt(qs.offset ?? "0", 10);
 
           const rows = await sqlConnection`
@@ -1116,13 +1115,13 @@ exports.handler = async (event) => {
           }
 
           return null;
-        }
+        };
 
         const isFiniteNumber = (v) => typeof v === "number" && Number.isFinite(v);
         const isFiniteInt = (v) => Number.isInteger(v) && Number.isFinite(v);
 
         const allowed = [
-          "daily_token_limit",
+          "max_messages_per_day",
           "min_messages_before_suggest",
           "max_characters_per_user_message",
           "max_characters_per_ai_message",
@@ -1146,23 +1145,23 @@ exports.handler = async (event) => {
           break;
         }
 
-        // validation
-        const updatedByEmail = body.updated_by_email;
-        if (!updatedByEmail || typeof updatedByEmail !== "string") {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "updated_by_email is required" });
+        // validate user
+        const adminEmail = event.requestContext?.authorizer?.email;
+        if (!adminEmail) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Unauthorized" });
           break;
         }
 
         if (
-          patch.daily_token_limit !== undefined &&
-          (!isFiniteInt(patch.daily_token_limit) ||
-            patch.daily_token_limit < 5000 ||
-            patch.daily_token_limit > 100000)
+          patch.max_messages_per_day !== undefined &&
+          (!isFiniteInt(patch.max_messages_per_day) ||
+            patch.max_messages_per_day < 1 ||
+            patch.max_messages_per_day > 1000)
         ) {
           response.statusCode = 400;
           response.body = JSON.stringify({
-            error: "daily_token_limit must be an integer between 5000 and 100000",
+            error: "max_messages_per_day must be an integer between 1 and 1000",
           });
           break;
         }
@@ -1240,17 +1239,17 @@ exports.handler = async (event) => {
           break;
         }
 
-        // get admin user ID using email
+        // get admin user ID and confirm role
         const adminRows = await sqlConnection`
           SELECT id, role
           FROM users
-          WHERE email = ${updatedByEmail}
+          WHERE email = ${adminEmail}
           LIMIT 1
         `;
 
         if (adminRows.length === 0) {
           response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Admin user not found for email" });
+          response.body = JSON.stringify({ error: "Admin user not found" });
           break;
         }
 
@@ -1272,7 +1271,7 @@ exports.handler = async (event) => {
           )
           UPDATE system_settings s
           SET
-            daily_token_limit = COALESCE(${patch.daily_token_limit}, s.daily_token_limit),
+            max_messages_per_day = COALESCE(${patch.max_messages_per_day}, s.max_messages_per_day),
             min_messages_before_suggest = COALESCE(${patch.min_messages_before_suggest}, s.min_messages_before_suggest),
             max_characters_per_user_message = COALESCE(${patch.max_characters_per_user_message}, s.max_characters_per_user_message),
             max_characters_per_ai_message = COALESCE(${patch.max_characters_per_ai_message}, s.max_characters_per_ai_message),
@@ -1288,7 +1287,7 @@ exports.handler = async (event) => {
           WHERE s.id = (SELECT id FROM latest)
           RETURNING
             s.id,
-            s.daily_token_limit,
+            s.max_messages_per_day,
             s.min_messages_before_suggest,
             s.max_characters_per_user_message,
             s.max_characters_per_ai_message,
@@ -1304,7 +1303,7 @@ exports.handler = async (event) => {
         `;
 
         if (updated.length === 0) {
-          // Should never happen because you seed system_settings.
+          // Should never happen because we seed system_settings
           response.statusCode = 500;
           response.body = JSON.stringify({
             error: "system_settings row not found (seed may not have run)",

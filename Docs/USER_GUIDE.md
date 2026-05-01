@@ -1,145 +1,172 @@
 # User Guide
 
-**Before you start:** confirm the app is deployed using the deployment guide at `Docs/DEPLOYMENT_GUIDE.md`.
+**Please ensure the application is deployed, instructions in the deployment guide here:**
 
-This document summarizes the main user flows, UI controls, and administrative actions in the Specialization Explorer frontend. It reflects the current UI and behavior implemented in the frontend code (chat, prompts, practice generation, audio, and admin features).
+- [Deployment Guide](./DEPLOYMENT_GUIDE.md)
 
-| Index    | Description |
-| -------- | ------- |
-| [Getting Started](#getting-started) | Create an account and get started with the app |
-| [Student View](#student-view) | Browse textbooks, use the Chat interface, and generate practice materials |
-| [Instructor View](#instructor-view) | Create, edit, and export practice materials (H5P / PDF) |
-| [Administrator View](#administrator-view) | Admin dashboards: ingestion, moderation, AI settings, analytics |
+Once you have deployed the solution, the following user guide will help you navigate the functions available.
+
+| Index | Description |
+| ----- | ----------- |
+| [Getting Started](#getting-started) | Open the app and start a conversation |
+| [Student View](#student-view) | Chat with the UBC Specialization Explorer to learn about UBC Science specializations |
+| [Administrator View](#administrator-view) | Manage data sources, LLM settings, analytics, and chat history |
 
 ---
 
 ## Getting Started
 
-1. Open the hosted site (Amplify URL provided in the deployment process) or run the frontend locally.
+Open the hosted Amplify URL provided during deployment, or run the frontend locally. No account is required — the chat interface is publicly accessible.
+
 ---
 
 ## Student View
-![image](./media/landing_page.png)
 
-This is the default experience and contains: textbook catalog, Chat (Study Companion), FAQ, Practice Materials, Shared Prompts, and audio accessibility settings.
+The student-facing interface is a chat assistant that helps users explore UBC Faculty of Science specializations.
 
-### Home / Textbook Catalog
+### Home Page
 
-![textbook_catalogue](./media/textbook_catalogue.png)
-- Browse textbook cards with title, author, and cover image. Use the search bar to find textbooks by title or author.
-- Click a textbook to view the textbook dashboard, which includes Chat, FAQ, Practice, and (for instructors) Material Editor.
-### Chat (Study Companion)
-![chat_window](./media/chat_window.png)
-- In the sidebar a user can select existing chat sessions or create a new session with the **+** button.
-- To delete a chat session, click the delete (trash) icon on a session in the sidebar; if you are the session owner, the session will be removed immediately. Administrators can delete any session via the admin dashboard. The operation is performed via the `DELETE /chat_sessions/{chat_session_id}` endpoint.
-- Type messages into the Chat input; press **Enter** to send (Shift+Enter inserts a newline).
-- Responses stream as the model generates them and may contain sources (citations) displayed below the reply.
-![chat_response](./media/AI_response.png)
-- The Chat supports prompt templates and guided prompts — open the Prompt Library to browse or apply templates.
+Users are immediately greeted with a welcome message and prompted to start a new conversation.
 
-- Session data is stored in localStorage and is valid for approximately 30 days; sessions are temporary and not a durable storage mechanism.
+![image](./media/home-page.png)
 
-Sharing chats:
-![share_chat](./media/share_chat_message.png)
-- Use the **Share** button to generate a public URL for the conversation. A privacy notice will appear before proceeding; you can dismiss it permanently using localStorage.
-- If you open a shared chat URL, you can preview and optionally fork the conversation into your own chat session.
+### Anonymous Pop-up
 
-### FAQ
-![faq](./media/faq_page.png)
-- The FAQ for each textbook lists commonly asked questions and the canonical answer.
-- Clicking a FAQ loads it as a pre-filled question into the Chat UI and increments its usage count.
-- To report an FAQ, click the flag icon on the FAQ Card.
+If the user has not signed in, a pop-up may appear explaining the anonymous session behaviour.
 
-### Practice Materials
-![practice_material](./media/practice_material.png)
-- Use the Practice tab to generate MCQs, Flashcards, and Short Answer question sets.
-- Validations and generation constraints (client-side):
-  - MCQ: 
-  - Flashcards
-  - Short Answer
-- Generated materials are session-scoped and can be exported.
+![image](./media/anonymous-pop-up.png)
 
- Grading:
-- The Short Answer material type supports a text grading/feedback flow (AI-assisted). The UI will show grading results where applicable.
-- MCQ material type will provide feedback based on whether the user chooses the correct or wrong answer. The UI will show hints or feedback as needed.
-- Flashcard is self graded. 
+### Chat Interface
 
-### Shared Prompts
-![shared_user_prompts](./media/shared_user_prompts.png)
-- Browse prompts shared by other users in the Shared Prompts tab.
-- Use the inline prompt card to insert the prompt into your chat session.
-- Report inappropriate shared prompts using the inline Flag icon on the prompt card.
+Each new chat starts with the assistant greeting the user and asking a series of questions to learn about their interests, study preferences, and goals. Once it has enough to go on, it switches to making recommendations.
 
-### Audio Controls
+![image](./media/first-interaction.png)
 
-- Open Audio Settings from the Sidebar to enable Narration, Autoplay, and choose which messages should be read (`Both`, `AI only`, `User only`).
-- Choose Voice, and set Rate, Pitch, and Volume. Use Play Sample to preview the voice.
+### Specialization Details
 
----
+After a recommendation is made, users can ask follow-up questions. The assistant can provide specialization course requirements, averages, and other program details sourced from the knowledge base.
 
-## Instructor View
+![image](./media/requirements-averages.png)
 
-Switch to Instructor mode via the Mode selector (top header). Instructors have access to the Material Editor and additional tools.
+### Hallucination Warnings
 
-### Material Editor & H5P Export
-![material_editor](./media/material_editor.png)
-- Use the Material Editor to review and edit MCQ, Short Answer, and Flashcard sets.
-- Edit questions, re-order, add options or explanations, and then export edits to H5P or PDF.
-- H5P export triggers the server-side packaging process and returns a downloadable zip file that can be imported into LMS platforms like Canvas or Moodle.
-- PDF export has 2 different modes. One is questions only, for students to use and another with the answers included for instructor use.
+If the AI's response is partially or fully unsupported by the knowledge base, a warning banner appears below the message advising the user to verify the information against the UBC calendar.
+
+![image](./media/suggestion-hallucination.png)
+
+### Expanded Sources
+
+AI responses may include source references. Users can expand these to see the original documents or web pages the answer was drawn from.
+
+![image](./media/expanded-resources.png)
+
+### Chat Sessions
+
+The left sidebar lists all previous chat sessions. Users can start a new chat with the `+` button, switch between sessions, or delete sessions via the actions menu on each session item.
+
 ---
 
 ## Administrator View
-![admin_login](./media/admin_login.png)
-Administrators log in via `/admin/login` and perform ingestion, metadata, moderation, and system configuration tasks.
 
-### Textbook Management & Ingestion
-![admin_dashboard](./media/admin_dashboard.png)
-- View ingestion status, job history, and content ingestion statistics in the Textbooks page.
-- Add or update textbook metadata and trigger re-ingestion when necessary
-![textbook_ingestion](./media/textbook_ingestion.png)
-### AI System & Operational Settings
-![ai_settings](./media/ai_settings.png)
-- Manage the system prompt, set token limits, and update operational settings in AI Settings.
+Administrators log in via Cognito and access the admin dashboard from the header. The sidebar provides navigation between four sections: Dashboard, System Settings, Analytics, and Chat History.
+
+If the administrator has just been given access, they will not have the mode dragdown option on the top right. They will manually have to add `/admin/login` to the end of the URL to login for the first time. After this, they will be able to see the mode dragdown option and will seamlessly be able to switch between the student and administrator view.
+
+![image](./media/admin-log-in.png)
+
+### Dashboard
+
+The dashboard shows platform-wide metrics (total users, chat sessions, and messages) and manages the knowledge base data sources.
+
+![image](./media/admin-dashboard.png)
+
+#### Adding a Website
+
+Click "Add Web URL" to stage a website for ingestion. Optionally provide include/exclude URL regex patterns to control which pages are crawled.
+
+![image](./media/admin-add-website.png)
+
+#### Adding a File
+
+Click "Add Alumni Data (CSV or Markdown)" to upload a CSV/Markdown file and its corresponding metadata JSON. Both files are uploaded to S3 and staged for the next sync.
+
+![image](./media/admin-add-file.png)
+
+#### Syncing Data Sources
+
+Once data sources are staged, click "Sync" to kick off an ingestion job. The table shows each source's type, name, and latest ingestion run status (Pending, Queued, Running, Completed, or Failed).
+
 
 ### Analytics
-![textbook_info](./media/textbook_info.png)
-- Console shows usage and activity metrics such as chat counts, prompt usage, and practice generation activity.
 
-### Reported Content & Moderation
-![reported_content](./media/reported_faq_and_prompts.png)
-- Review reported items for FAQ and shared prompts; each report includes optional user comments.
-- Actions available: dismiss a report or delete the flagged item.
+The Analytics page shows time-series charts for users, chat sessions, and questions asked. Use the "Last N Days" input to adjust the date range (1–365 days).
 
----
+![image](./media/admin-analytics.png)
 
-## Reporting & Moderation Flow
+### System Settings
 
-- Shared Prompts use an inline Flag control for reporting (opens a dialog for optional comments).
-- FAQ entries uses an inline flag control for reporting.
-- Admins receive reports in the Admin dashboard under Reported Items.
+The System Settings page controls global platform behaviour and AI prompt configuration.
 
----
+![image](./media/admin-system-settings.png)
 
-## Troubleshooting & Best Practices
+#### General Settings
 
-Troubleshooting tips:
-- If the frontend cannot reach the backend, verify your `VITE_API_ENDPOINT` setting and Amplify configuration.
-- For audio issues, check browser permissions and the selected voice.
-- If H5P export fails, check the API logs and ensure the packaging backend is reachable.
-- For WebSocket (chat streaming) issues, inspect the browser console for WebSocket endpoints and network errors.
-- If you are logged in as an admin, and you have just uploaded new materials, they will initially be disabled by default. Make sure to enable the "status" toggle, and the textbook will be ready for use.
+Admins can configure:
+- Max messages per day per user — daily cap on how many messages a student can send before being rate-limited.
+- Min exchanges before suggestion phase activates — how many back-and-forth turns must happen before the AI is allowed to recommend specializations.
+- Max characters per user and AI message — caps the length of both student inputs and AI responses.
+- Temperature — controls how "creative" the AI sounds (0.0–1.0). Lower values produce more consistent, predictable answers; higher values produce more varied responses.
+- Top-p — works alongside temperature to fine-tune response variety (0.0–1.0). In most cases the default value works well and doesn't need to be changed.
+- Support score threshold — minimum score (0.0–1.0) for the AI's claims to be considered backed by the retrieved sources. Responses falling below this are immediately flagged as unsupported.
+- Scope alignment score threshold — minimum score (0.0–1.0) for the retrieved sources to be considered relevant to the user's question. Falling below this also forces an unsupported label.
+- Grounded threshold — score (0.0–1.0) above which a response is considered fully grounded and no warning is shown.
+- Partially grounded threshold — score above which (but below the grounded threshold) a partial hallucination warning is shown. Responses below this receive a full warning.
+- Allowed specializations list — the explicit list of specializations the AI is permitted to recommend.
 
-Best practices:
-- Be specific with user questions and include a textbook section or page reference to improve source relevance.
-- Use the Prompt Library and Guided Prompts to generate repeatable, reproducible prompts.
-- Avoid sharing personally identifiable or sensitive information in public shared chat links.
-- Export practice sets to H5P or PDF if you require persistent content beyond the session (session data persists for ~30 days).
+#### System Messages — Affects Text Generation
+
+These messages are injected into the AI prompt and directly influence how the assistant responds. Each message type has version history — admins can save new versions, activate a previous version, or delete inactive versions.
+
+![image](./media/admin-messages-that-affect-text-gen.png)
+
+Message types that affect text generation:
+
+- Initial Prompt — the opening message sent to the AI to kick off each conversation, setting the tone and first questions asked.
+- System Role — defines who the assistant is and what it specializes in (e.g. UBC Science Specialization Explorer).
+- Detective Phase Prompt — instructs the AI on how to gather missing information from the user before making any recommendations.
+- Suggestion Phase Prompt — instructs the AI on how to transition into making specialization recommendations once enough context is collected.
+- System Checklist — the list of key data points (subject area, career goal, work style, etc.) the AI must collect before suggesting a specialization.
+- System Instructions — formatting and behavioral rules for how the AI structures and delivers its responses.
+- Guardrails — hard boundaries that keep the AI on-topic, prevent jailbreaks, and block harmful or out-of-scope content.
+
+#### System Messages — UI Only
+
+These messages appear in the interface but are not sent to the AI model. They include the Welcome Message, Disclaimer, and hallucination warning text.
+
+![image](./media/admin-messages-that-do-not-affect-text-gen.png)
+
+#### Message Versioning
+
+Each system message supports full version history. Admins can navigate between versions using Prev/Next or the version chips, activate an older version, or delete unused versions.
+
+![image](./media/admin-message-versioning.png)
+
+#### Prompt Stack Viewer
+
+The "How the Prompt Is Built" card shows a visual breakdown of how the active message blocks are assembled into the final AI prompt, with a toggle to preview the Detective vs. Suggestion phase layout.
+
+![image](./media/admin-system-settings-stack.png)
+
+### Chat History
+
+The Chat History page lets admins review all user conversations. Expand a user row to see their sessions, then click a session to view the full message transcript on the right, including any sources the AI cited.
+
+![image](./media/admin-chat-history.png)
 
 ---
 
 ## Additional Resources
 
 - [Deployment Guide](./DEPLOYMENT_GUIDE.md)
-- [Architecture Documentation](./ARCHITECTURE.md)
-- [API Documentation](./API_DOCUMENTATION.pdf)
+- [Architecture Documentation](./ARCHITECTURE_DEEP_DIVE.md)
+- [API Documentation](./API_DOCUMENTATION.md)

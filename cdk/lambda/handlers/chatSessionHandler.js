@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { getCorsHeaders } = require("./utils/cors.js");
 const postgres = require("postgres");
 const {
   SecretsManagerClient,
@@ -36,15 +37,10 @@ const initConnection = async () => {
   }
 };
 
-const createResponse = () => ({
-  statusCode: 200,
-  headers: {
-    "Access-Control-Allow-Headers":
-      "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-  },
-  body: "",
+const createResponse = async (event) => ({
+    statusCode: 200,
+    headers: await getCorsHeaders(event),
+    body: "",
 });
 
 const parseBody = (body) => {
@@ -62,7 +58,7 @@ const handleError = (error, response) => {
 };
 
 exports.handler = async (event) => {
-  const response = createResponse();
+  const response = await createResponse(event);
   let data;
 
   try {
@@ -134,9 +130,13 @@ exports.handler = async (event) => {
         break;
       }
 
-      case "GET /chat_sessions/{chat_session_id}/chat_history": {
+      case "PUT /chat_sessions/{chat_session_id}": {
         const chatSessionId = event.pathParameters?.chat_session_id;
-        const requestingUserId = event.queryStringParameters?.user_id;
+
+        // Accept both names for compatibility while you transition
+        const userId =
+          event.queryStringParameters?.user_id ||
+          event.queryStringParameters?.user_session_id;
 
         if (!chatSessionId) {
           response.statusCode = 400;
@@ -144,9 +144,65 @@ exports.handler = async (event) => {
           break;
         }
 
-        if (!requestingUserId) {
+        if (!userId) {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_id query parameter is required" });
+          response.body = JSON.stringify({ error: "user_id is required" });
+          break;
+        }
+
+        const body = parseBody(event.body);
+        const title = typeof body.title === "string" ? body.title.trim() : "";
+
+        if (!title) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "title is required" });
+          break;
+        }
+
+        const chatSession = await sqlConnection`
+          SELECT id, user_id
+          FROM chat_sessions
+          WHERE id = ${chatSessionId}
+        `;
+
+        if (chatSession.length === 0) {
+          response.statusCode = 404;
+          response.body = JSON.stringify({ error: "Chat session not found" });
+          break;
+        }
+
+        if (chatSession[0].user_id !== userId) {
+          response.statusCode = 403;
+          response.body = JSON.stringify({ error: "You can only rename your own chat sessions" });
+          break;
+        }
+
+        const updated = await sqlConnection`
+          UPDATE chat_sessions
+          SET title = ${title}, last_active_at = NOW()
+          WHERE id = ${chatSessionId}
+          RETURNING id, user_id, title, created_at, last_active_at, metadata
+        `;
+
+        response.statusCode = 200;
+        data = updated[0];
+        response.body = JSON.stringify(data);
+        break;
+      }
+
+      case "GET /chat_sessions/{chat_session_id}/chat_history": {
+        const chatSessionId = event.pathParameters?.chat_session_id;
+        const authenticatedUserId = event?.requestContext?.authorizer?.userId;
+
+        if (!chatSessionId) {
+          response.statusCode = 400;
+          response.body = JSON.stringify({ error: "chat_session_id is required" });
+          break;
+        }
+
+        if (!authenticatedUserId) {
+          response.statusCode = 401;
+          response.body = JSON.stringify({ error: "Authentication required" });
           break;
         }
 
@@ -164,7 +220,7 @@ exports.handler = async (event) => {
 
         // Ownership validation (mandatory)
         const ownerId = chatSessionResult[0].user_id;
-        if (ownerId !== requestingUserId) {
+        if (ownerId !== authenticatedUserId) {
           response.statusCode = 403;
           response.body = JSON.stringify({
             error: "Access denied",
@@ -187,62 +243,6 @@ exports.handler = async (event) => {
         };
 
         response.statusCode = 200;
-        response.body = JSON.stringify(data);
-        break;
-      }
-
-      case "GET /chat_sessions/{chat_session_id}/interactions": {
-        const chatSessionId = event.pathParameters?.chat_session_id;
-        const requestingUserSessionId = event.queryStringParameters?.user_session_id;
-
-        if (!chatSessionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "chat_session_id is required" });
-          break;
-        }
-
-        // SECURITY: Verify chat session exists and validate ownership
-        const chatSessionResult = await sqlConnection`
-          SELECT id, user_session_id FROM chat_sessions WHERE id = ${chatSessionId}
-        `;
-
-        if (chatSessionResult.length === 0) {
-          response.statusCode = 404;
-          response.body = JSON.stringify({ error: "Chat session not found" });
-          break;
-        }
-
-        // SECURITY: Validate session ownership (mandatory)
-        if (!requestingUserSessionId) {
-          response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_session_id query parameter is required" });
-          break;
-        }
-
-        const sessionOwner = chatSessionResult[0].user_session_id;
-        if (sessionOwner !== requestingUserSessionId) {
-          console.warn(`Unauthorized access attempt: user_session ${requestingUserSessionId} tried to access chat_session ${chatSessionId} owned by ${sessionOwner}`);
-          response.statusCode = 403;
-          response.body = JSON.stringify({
-            error: "Access denied",
-            message: "You do not have permission to access this chat session"
-          });
-          break;
-        }
-
-        // Fetch all interactions for this chat session
-        const interactions = await sqlConnection`
-          SELECT id, sender_role, query_text, response_text, source_chunks, created_at, order_index
-          FROM user_interactions
-          WHERE chat_session_id = ${chatSessionId}
-          ORDER BY order_index ASC, created_at ASC
-        `;
-
-        data = {
-          chat_session_id: chatSessionResult[0].id,
-          interactions,
-        };
-
         response.body = JSON.stringify(data);
         break;
       }
@@ -289,17 +289,6 @@ exports.handler = async (event) => {
         // Delete children first if you DON'T have ON DELETE CASCADE
         await sqlConnection`
           DELETE FROM chat_messages
-          WHERE chat_session_id = ${chatSessionId}
-        `;
-
-        // Optional cleanup (only if you want these removed too)
-        await sqlConnection`
-          DELETE FROM session_feedback
-          WHERE chat_session_id = ${chatSessionId}
-        `;
-
-        await sqlConnection`
-          DELETE FROM analytics_events
           WHERE chat_session_id = ${chatSessionId}
         `;
 

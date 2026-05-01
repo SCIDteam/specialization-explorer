@@ -1,7 +1,6 @@
 import * as cdk from "aws-cdk-lib";
 import { Stack, StackProps, CfnOutput, RemovalPolicy } from "aws-cdk-lib";
 import * as s3 from "aws-cdk-lib/aws-s3";
-import * as ssm from "aws-cdk-lib/aws-ssm";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
@@ -15,9 +14,7 @@ import {
   Provider,
 } from "aws-cdk-lib/custom-resources";
 
-// Fallback placeholder URL if SSM parameter doesn't exist
 const FALLBACK_URL = ["https://example.com"];
-const WEB_CRAWLER_URLS_PARAM = "/SpecEx/KnowledgeBase/WebCrawlerUrls";
 
 // Bedrock KB / AOSS index settings
 const VECTOR_INDEX_NAME = "bedrock-knowledge-base-default-index";
@@ -37,6 +34,7 @@ export class KnowledgeBaseStack extends Stack {
   public readonly knowledgeBaseBucket: s3.Bucket;
   public readonly vectorCollection: opensearchserverless.CfnCollection;
   public readonly knowledgeBaseId: string;
+  public readonly knowledgeBaseSecret: secretsmanager.Secret;
   public readonly s3DataSourceId: string;
   public readonly webCrawlerDataSourceId: string;
 
@@ -77,6 +75,7 @@ export class KnowledgeBaseStack extends Stack {
         resources: AwsCustomResourcePolicy.ANY_RESOURCE,
       }),
     });
+
 
     // Create encryption policy for OpenSearch Serverless
     const encryptionPolicy = new opensearchserverless.CfnSecurityPolicy(this, "EncryptionPolicy", {
@@ -148,7 +147,7 @@ export class KnowledgeBaseStack extends Stack {
       cors: [{
         allowedHeaders: ["*"],
         allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
-        allowedOrigins: ["*"], // TODO: restrict in production
+        allowedOrigins: ["*"], 
         exposedHeaders: ["ETag"],
       }],
     });
@@ -209,7 +208,7 @@ export class KnowledgeBaseStack extends Stack {
     // Vector Index Manager Lambda
     const vectorIndexManagerFn = new lambda.DockerImageFunction(this, "VectorIndexManagerFn", {
       role: vectorIndexManagerRole,
-      timeout: cdk.Duration.minutes(15),
+      timeout: cdk.Duration.minutes(2),
       memorySize: 512,
       functionName: `${props.stackPrefix}-KnowledgeBase-VectorIndexManagerFn`,
       code: lambda.DockerImageCode.fromEcr(props.vectorIndexManagerRepository, {
@@ -220,6 +219,9 @@ export class KnowledgeBaseStack extends Stack {
 
     const vectorIndexProvider = new Provider(this, "VectorIndexProvider", {
       onEventHandler: vectorIndexManagerFn,
+      isCompleteHandler: vectorIndexManagerFn,
+      queryInterval: cdk.Duration.seconds(30),
+      totalTimeout: cdk.Duration.minutes(30),
     });
 
     // OpenSearch Serverless data access policy
@@ -270,12 +272,7 @@ export class KnowledgeBaseStack extends Stack {
     vectorIndexProvider.node.addDependency(networkPolicy);
     vectorIndexProvider.node.addDependency(dataAccessPolicy);
 
-    let webCrawlerUrls: string;
-    try {
-      webCrawlerUrls = ssm.StringParameter.valueFromLookup(this, WEB_CRAWLER_URLS_PARAM);
-    } catch {
-      webCrawlerUrls = FALLBACK_URL.join(",");
-    }
+    const webCrawlerUrls = FALLBACK_URL.join(",");
 
     // Role for Knowledge Base Provisioner Lambda
     const kbProvisionerRole = new iam.Role(this, "KBProvisionerRole", {
@@ -327,7 +324,10 @@ export class KnowledgeBaseStack extends Stack {
         MetadataField: METADATA_FIELD_NAME,
         Description: "Knowledge base for RAG application with S3 and web-crawled content",
         S3BucketArn: this.knowledgeBaseBucket.bucketArn,
-        WebCrawlerUrls: webCrawlerUrls
+        WebCrawlerUrls: webCrawlerUrls,
+        // If the placeholder URL is used, exclude everything so nothing gets crawled.
+        // When real URLs are set, no exclusion filter is applied.
+        WebCrawlerExclusionFilters: webCrawlerUrls.trim() === "https://example.com" ? "https://example\\.com.*" : "",
       },
     });
 
@@ -338,12 +338,50 @@ export class KnowledgeBaseStack extends Stack {
     this.s3DataSourceId = kbCustomResource.getAttString("S3DataSourceId");
     this.webCrawlerDataSourceId = kbCustomResource.getAttString("WebCrawlerDataSourceId");
 
-    // Store Knowledge Base ID in AWS Secrets Manager
-    const knowledgeBaseIdSecret = new secretsmanager.Secret(this, "KnowledgeBaseIdSecret", {
-      secretName: `${props.stackPrefix}/KnowledgeBase/IdV2`,
-      description: "The ID of the Bedrock Knowledge Base",
-      secretStringValue: cdk.SecretValue.unsafePlainText(this.knowledgeBaseId),
+    // Create the secret if it doesn't exist, update its value if it does
+    const knowledgeBaseSecretName = `${props.stackPrefix}/KnowledgeBase/Id`;
+    const secretArn = `arn:aws:secretsmanager:${this.region}:${this.account}:secret:${knowledgeBaseSecretName}-*`;
+
+    const ensureSecret = new AwsCustomResource(this, "EnsureKBSecret", {
+      onCreate: {
+        service: "SecretsManager",
+        action: "createSecret",
+        parameters: {
+          Name: knowledgeBaseSecretName,
+          SecretString: this.knowledgeBaseId,
+          Description: "Knowledge Base ID for the application",
+        },
+        physicalResourceId: PhysicalResourceId.of(knowledgeBaseSecretName),
+        ignoreErrorCodesMatching: "ResourceExistsException",
+      },
+      onUpdate: {
+        service: "SecretsManager",
+        action: "putSecretValue",
+        parameters: {
+          SecretId: knowledgeBaseSecretName,
+          SecretString: this.knowledgeBaseId,
+        },
+        physicalResourceId: PhysicalResourceId.of(knowledgeBaseSecretName),
+      },
+      policy: AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          actions: ["secretsmanager:CreateSecret"],
+          resources: ["*"], // CreateSecret cannot be scoped to a specific ARN (secret doesn't exist yet)
+        }),
+        new iam.PolicyStatement({
+          actions: ["secretsmanager:PutSecretValue"],
+          resources: [secretArn],
+        }),
+      ]),
     });
+
+    ensureSecret.node.addDependency(kbCustomResource);
+
+    this.knowledgeBaseSecret = secretsmanager.Secret.fromSecretNameV2(
+      this,
+      "KnowledgeBaseIdSecret",
+      knowledgeBaseSecretName
+    ) as secretsmanager.Secret;
 
     // Outputs
     new CfnOutput(this, "KnowledgeBaseId", {
@@ -377,7 +415,7 @@ export class KnowledgeBaseStack extends Stack {
     });
 
     new CfnOutput(this, "KnowledgeBaseIdSecretArn", {
-      value: knowledgeBaseIdSecret.secretArn,
+      value: this.knowledgeBaseSecret.secretArn,
       description: "The ARN of the secret containing the Knowledge Base ID",
     });
   }

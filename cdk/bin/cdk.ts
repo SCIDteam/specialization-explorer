@@ -71,6 +71,8 @@ const apiStack = new ApiGatewayStack(
   {
     env,
     ecrRepositories: cicdStack.ecrRepositories,
+    knowledgeBaseBucket: kbStack.knowledgeBaseBucket,
+    knowledgeBaseSecret: kbStack.knowledgeBaseSecret,
   }
 );
 apiStack.addDependency(kbStack);
@@ -80,6 +82,8 @@ const amplifyStack = new AmplifyStack(app, `${StackPrefix}-Amplify`, apiStack, {
   env,
   githubRepo: githubRepo,
   githubBranch: githubBranch,
+  knowledgeBaseBucketName: kbStack.knowledgeBaseBucket.bucketName,
+  allowedOriginsParamName: apiStack.allowedOriginsParamName,
 });
 amplifyStack.addDependency(apiStack);
 

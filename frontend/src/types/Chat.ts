@@ -11,6 +11,6 @@ export interface Message {
     questionIndex: number;
     totalQuestions: number;
   };
-  isFromSharedChat?: boolean;
   warning?: string | null;
+  hasPII?: boolean;
 }

@@ -1,4 +1,5 @@
 const { initializeConnection } = require("../initializeConnection.js");
+const { getCorsHeaders } = require("./cors.js");
 
 let { SM_DB_CREDENTIALS, RDS_PROXY_ENDPOINT } = process.env;
 let sqlConnection;
@@ -9,13 +10,9 @@ const initConnection = async () => {
   }
 };
 
-const createResponse = () => ({
+const createResponse = async (event) => ({
   statusCode: 200,
-  headers: {
-    "Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "*",
-  },
+  headers: await getCorsHeaders(event),
   body: "",
 });
 

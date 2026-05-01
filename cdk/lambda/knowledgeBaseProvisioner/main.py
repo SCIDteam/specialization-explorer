@@ -2,15 +2,21 @@ import json
 import boto3
 import logging
 import time
+import random
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 bedrock_agent = boto3.client('bedrock-agent')
 
-KB_CREATE_RETRY_WINDOW_SECONDS = 300
-KB_CREATE_RETRY_SLEEP_SECONDS = 15
+# Reduced window because the index is already guaranteed to exist.
+# This only accounts for Bedrock's internal cache delays.
+KB_CREATE_RETRY_WINDOW_SECONDS = 120 
 
+def calculate_exponential_backoff(attempt, base=2, max_sleep=15): 
+    sleep_time = min(base**attempt, max_sleep)
+    sleep_time *= (0.5 + random.random() / 2)
+    return sleep_time
 
 def _create_kb_and_data_sources(props):
     name = props['Name']
@@ -61,17 +67,22 @@ def _create_kb_and_data_sources(props):
                 or "storage configuration provided is invalid" in message.lower()
             )
 
-            if is_index_not_ready and time.time() < deadline:
+            if is_index_not_ready:
+                sleep_time = calculate_exponential_backoff(attempt)
+                
+                if time.time() + sleep_time > deadline:
+                    logger.error(f"Bedrock failed to recognize the index after {KB_CREATE_RETRY_WINDOW_SECONDS} seconds.")
+                    raise
+
                 seconds_left = int(deadline - time.time())
                 logger.warning(
-                    "Knowledge base create attempt %s failed because index is not visible yet. "
-                    "Retrying in %ss (time left: %ss). Error: %s",
-                    attempt,
-                    KB_CREATE_RETRY_SLEEP_SECONDS,
+                    "Bedrock API cache has not recognized the index yet. "
+                    "Retrying in %.1fs (time left: %ss). Error: %s",
+                    sleep_time,
                     seconds_left,
                     message,
-                )
-                time.sleep(KB_CREATE_RETRY_SLEEP_SECONDS)
+                )          
+                time.sleep(sleep_time)
                 continue
             raise
 
@@ -113,18 +124,27 @@ def _create_kb_and_data_sources(props):
         if urls:
             logger.info(f"Creating Web Crawler Data Source for URLs: {urls}")
             try:
+                exclusion_filters_str = props.get('WebCrawlerExclusionFilters', '')
+                exclusion_filters = [f.strip() for f in exclusion_filters_str.split(',') if f.strip()]
+
+                web_config = {
+                    'sourceConfiguration': {
+                        'urlConfiguration': {
+                            'seedUrls': [{'url': url} for url in urls]
+                        }
+                    }
+                }
+                if exclusion_filters:
+                    web_config['crawlerConfiguration'] = {
+                        'exclusionFilters': exclusion_filters
+                    }
+
                 ds_response = bedrock_agent.create_data_source(
                     knowledgeBaseId=kb_id,
                     name=f"{name}-web-source",
                     dataSourceConfiguration={
                         'type': 'WEB',
-                        'webConfiguration': {
-                            'sourceConfiguration': {
-                                'urlConfiguration': {
-                                    'seedUrls': [{'url': url} for url in urls]
-                                }
-                            }
-                        }
+                        'webConfiguration': web_config
                     },
                     vectorIngestionConfiguration={
                         'chunkingConfiguration': {
@@ -140,7 +160,7 @@ def _create_kb_and_data_sources(props):
                 web_ds_id = ds_response['dataSource']['dataSourceId']
                 logger.info(f"Successfully created Web Crawler Data Source. ID: {web_ds_id}")
             except Exception as e:
-                logger.warning(f"Could not create Web Crawler Data Source. This might happen if 'urls' are invalid or dummy variables were passed. Error: {str(e)}")
+                logger.warning(f"Could not create Web Crawler Data Source. Error: {str(e)}")
 
     return {
         'kb_id': kb_id,
@@ -192,18 +212,27 @@ def _ensure_data_sources_for_kb(kb_id, props):
         urls = [url.strip() for url in web_urls_str.split(',') if url.strip()]
         if urls:
             logger.info("Web data source missing on update; creating it.")
+            exclusion_filters_str = props.get('WebCrawlerExclusionFilters', '')
+            exclusion_filters = [f.strip() for f in exclusion_filters_str.split(',') if f.strip()]
+
+            web_config = {
+                'sourceConfiguration': {
+                    'urlConfiguration': {
+                        'seedUrls': [{'url': url} for url in urls]
+                    }
+                }
+            }
+            if exclusion_filters:
+                web_config['crawlerConfiguration'] = {
+                    'exclusionFilters': exclusion_filters
+                }
+
             ds_response = bedrock_agent.create_data_source(
                 knowledgeBaseId=kb_id,
                 name=f"{name}-web-source",
                 dataSourceConfiguration={
                     'type': 'WEB',
-                    'webConfiguration': {
-                        'sourceConfiguration': {
-                            'urlConfiguration': {
-                                'seedUrls': [{'url': url} for url in urls]
-                            }
-                        }
-                    }
+                    'webConfiguration': web_config
                 },
                 vectorIngestionConfiguration={
                     'chunkingConfiguration': {
@@ -252,9 +281,6 @@ def on_create(event):
     }
 
 def on_update(event):
-    # Keep attributes stable across updates because CloudFormation getAtt consumers
-    # (secret/output resources) require these keys in every successful response.
-    # If the physical KB was deleted out-of-band/rollback, recreate it here.
     physical_id = event['PhysicalResourceId']
     props = event.get('ResourceProperties', {})
 
@@ -292,7 +318,6 @@ def on_delete(event):
     if kb_id and kb_id != 'failed-to-create' and not kb_id.startswith('CustomResource'):
         try:
             logger.info(f"Deleting Knowledge Base: {kb_id}")
-            # Note: Deleting a knowledge base automatically deletes its data sources
             bedrock_agent.delete_knowledge_base(knowledgeBaseId=kb_id)
             logger.info(f"Successfully deleted Knowledge Base: {kb_id}")
         except bedrock_agent.exceptions.ResourceNotFoundException:

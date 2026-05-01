@@ -270,12 +270,77 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /admin/data_sources/website:
+  /admin/data_sources:
     <<: *commonOptions
+    get:
+      tags: [Admin]
+      summary: List data sources with latest ingestion run
+      operationId: get_admin_data_sources
+      security:
+        - adminAuthorizer: []
+      responses:
+        "200":
+          description: Data sources with latest ingestion run per source
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        data_source:
+                          type: object
+                          properties:
+                            id: { type: string }
+                            name: { type: string }
+                            type:
+                              type: string
+                              enum: [website, csv, markdown, json]
+                            created_at: { type: string }
+                            metadata:
+                              type: object
+                              additionalProperties: true
+                            include_patterns:
+                              type: array
+                              nullable: true
+                              items: { type: string }
+                            exclude_patterns:
+                              type: array
+                              nullable: true
+                              items: { type: string }
+                        latest_ingestion_run:
+                          nullable: true
+                          type: object
+                          properties:
+                            id: { type: string }
+                            data_source_id: { type: string }
+                            status:
+                              type: string
+                              enum: [pending, queued, running, failed, completed]
+                            error_message:
+                              type: string
+                              nullable: true
+                            created_at: { type: string }
+                            completed_at:
+                              type: string
+                              nullable: true
+      "401":
+        description: Unauthorized
+      "500":
+        description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
     post:
       tags: [Admin]
-      summary: Add website data source
-      operationId: add_website_data_source
+      summary: Stage data sources for future syncing
+      operationId: add_data_sources
       security:
         - adminAuthorizer: []
       requestBody:
@@ -285,9 +350,16 @@ paths:
             schema:
               type: object
               required:
-                - name
+                - type
                 - created_by
               properties:
+                type:
+                  type: string
+                  enum: [website, csv, markdown]
+                  example: website
+                created_by:
+                  type: string
+                  example: example@email.com
                 name:
                   type: string
                   example: https://example.com
@@ -299,12 +371,27 @@ paths:
                   type: array
                   items:
                     type: string
-                created_by:
+                csv_file_name:
                   type: string
-                  example: example@email.com
+                  example: alumni_data_final.csv
+                csv_s3_bucket:
+                  type: string
+                  example: my-kb-bucket
+                csv_s3_key:
+                  type: string
+                  example: uploads/csv/1712345678_alumni_data_final.csv
+                metadata_file_name:
+                  type: string
+                  example: alumni_data_final.csv.metadata.json
+                metadata_s3_bucket:
+                  type: string
+                  example: my-kb-bucket
+                metadata_s3_key:
+                  type: string
+                  example: uploads/json/1712345678_alumni_data_final.csv.metadata.json
       responses:
         "200":
-          description: Website data source request accepted
+          description: Data source(s) staged successfully
           content:
             application/json:
               schema:
@@ -312,22 +399,23 @@ paths:
                 properties:
                   message:
                     type: string
-                  name:
+                  action:
                     type: string
-                  include_patterns:
-                    type: array
-                    items:
-                      type: string
-                  exclude_patterns:
-                    type: array
-                    items:
-                      type: string
+                  type:
+                    type: string
+                    enum: [website, csv, markdown]
                   created_by:
                     type: string
+                  staged_data_source_ids:
+                    type: array
+                    items:
+                      type: string
         "400":
           description: Invalid request
         "404":
           description: Route not found
+        "409":
+          description: Conflict
         "500":
           description: Internal Server Error
       x-amazon-apigateway-integration:
@@ -337,7 +425,110 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /admin/data_sources/sync:
+    <<: *commonOptions
+    post:
+      tags: [Admin]
+      summary: Queue pending data sources and begin syncing
+      operationId: sync_data_sources
+      security:
+        - adminAuthorizer: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                created_by:
+                  type: string
+                  example: example@email.com
+      responses:
+        "200":
+          description: Sync process started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  action:
+                    type: string
+                  sync_session_id:
+                    type: string
+                  queued_count:
+                    type: integer
+                  s3_queued_count:
+                    type: integer
+                  website_queued_count:
+                    type: integer
+        "400":
+          description: Invalid request
+        "404":
+          description: Route not found
+        "409":
+          description: A sync is already running or no pending data sources exist
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
+        passthroughBehavior: when_no_match
+        httpMethod: POST
+        type: aws_proxy
 
+  /admin/generate-presigned-url:
+    <<: *commonOptions
+    get:
+      tags:
+        - Admin
+      summary: Generate a pre-signed URL for uploading knowledge base files to S3
+      operationId: generate_presigned_url
+      security:
+        - adminAuthorizer: []
+      parameters:
+        - name: file_name
+          in: query
+          required: true
+          description: Name of the file to upload
+          schema:
+            type: string
+            maxLength: 255
+        - name: content_type
+          in: query
+          required: false
+          description: MIME type of the file
+          schema:
+            type: string
+            default: "application/octet-stream"
+      responses:
+        "200":
+          description: Pre-signed URL generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presignedUrl:
+                    type: string
+                    description: The pre-signed URL for uploading
+                  key:
+                    type: string
+                    description: The S3 object key
+                  bucket:
+                    type: string
+                    description: The S3 bucket name
+        "400":
+          description: Bad Request - Missing required parameters
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
 
   /admin/system-settings:
     <<: *commonOptions
@@ -356,10 +547,10 @@ paths:
                 type: object
                 properties:
                   id: { type: string }
-                  daily_token_limit: { type: integer }
+                  max_messages_per_day: { type: integer }
                   min_messages_before_suggest: { type: integer }
-                  max_chatacters_per_user_message: { type: integer }
-                  max_chatacters_per_ai_message: { type: integer }
+                  max_characters_per_user_message: { type: integer }
+                  max_characters_per_ai_message: { type: integer }
                   temperature: { type: number }
                   top_p: { type: number }
                   support_score_threshold: { type: number }
@@ -390,10 +581,10 @@ paths:
             schema:
               type: object
               properties:
-                daily_token_limit: { type: integer }
+                max_messages_per_day: { type: integer }
                 min_messages_before_suggest: { type: integer }
-                max_chatacters_per_user_message: { type: integer }
-                max_chatacters_per_ai_message: { type: integer }
+                max_characters_per_user_message: { type: integer }
+                max_characters_per_ai_message: { type: integer }
                 temperature: { type: number }
                 top_p: { type: number }
                 support_score_threshold: { type: number }
@@ -409,10 +600,10 @@ paths:
                 type: object
                 properties:
                   id: { type: string }
-                  daily_token_limit: { type: integer }
+                  max_messages_per_day: { type: integer }
                   min_messages_before_suggest: { type: integer }
-                  max_chatacters_per_user_message: { type: integer }
-                  max_chatacters_per_ai_message: { type: integer }
+                  max_characters_per_user_message: { type: integer }
+                  max_characters_per_ai_message: { type: integer }
                   temperature: { type: number }
                   top_p: { type: number }
                   support_score_threshold: { type: number }
@@ -1012,99 +1203,6 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /admin/data_sources:
-    <<: *commonOptions
-    get:
-      tags: [Admin]
-      summary: List data sources with latest ingestion run
-      operationId: get_admin_data_sources
-      security:
-        - adminAuthorizer: []
-      responses:
-        "200":
-          description: Data sources with latest ingestion run per source
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  items:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        data_source:
-                          type: object
-                          properties:
-                            id: { type: string }
-                            name: { type: string }
-                            type:
-                              type: string
-                              enum: [website, csv, json]
-                            created_at: { type: string }
-                            metadata:
-                              type: object
-                              additionalProperties: true
-                            include_patterns:
-                              type: array
-                              nullable: true
-                              items: { type: string }
-                            exclude_patterns:
-                              type: array
-                              nullable: true
-                              items: { type: string }
-                        latest_ingestion_run:
-                          nullable: true
-                          type: object
-                          properties:
-                            id: { type: string }
-                            data_source_id: { type: string }
-                            status:
-                              type: string
-                              enum: [running, failed, completed]
-                            error_message:
-                              type: string
-                              nullable: true
-                            created_at: { type: string }
-                            completed_at:
-                              type: string
-                              nullable: true
-        "401": { description: Unauthorized }
-        "500": { description: Internal Server Error }
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${adminFunction.Arn}/invocations
-        passthroughBehavior: when_no_match
-        httpMethod: POST
-        type: aws_proxy
-
-  /public/config/userGuidelines:
-    <<: *commonOptions
-    get:
-      tags:
-        - User
-      summary: Get the user guidelines displayed on the guidelines page
-      operationId: get_public_user_guidelines
-      responses:
-        "200":
-          description: Returns a JSON object with the user guidelines content
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  userGuidelines:
-                    type: string
-                    description: The user guidelines content (markdown or plain text)
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-
   /system_message/{message_type}:
     <<: *commonOptions
     get:
@@ -1166,8 +1264,92 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /system-settings/max-characters-per-user-message:
+    <<: *commonOptions
+    get:
+      tags: [System]
+      summary: Get max characters allowed per user message
+      operationId: get_system_setting_max_characters_per_user_message
+      security:
+        - userAuthorizer: []
+      responses:
+        "200":
+          description: Max characters allowed per user message
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  max_characters_per_user_message:
+                    type: integer
+                required:
+                  - max_characters_per_user_message
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${systemMessagesFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
   /chat_sessions/{chat_session_id}:
     <<: *commonOptions
+    put:
+      tags:
+        - ChatSessions
+      summary: Rename a specific chat session (only the owning user may update)
+      operationId: update_chat_session
+      security:
+        - userAuthorizer: []
+      parameters:
+        - name: chat_session_id
+          in: path
+          required: true
+          description: Chat session UUID
+          schema:
+            type: string
+            format: uuid
+        - name: user_id
+          in: query
+          required: true
+          description: User UUID used to verify ownership when renaming
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+              properties:
+                title:
+                  type: string
+                  minLength: 1
+      responses:
+        "200":
+          description: Chat session renamed successfully
+        "400":
+          description: Invalid request
+        "403":
+          description: Forbidden - User does not own this chat session
+        "404":
+          description: Chat session not found
+        "401":
+          description: Unauthorized
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${chatSessionFunction.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
     delete:
       tags:
         - ChatSessions
@@ -1493,89 +1675,6 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /user_sessions/{session_id}/interactions:
-    <<: *commonOptions
-    post:
-      tags:
-        - User
-      summary: Create user interaction for session
-      operationId: create_session_interaction
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          description: User session UUID
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - sender_role
-              properties:
-                sender_role:
-                  type: string
-                  enum: ["AI", "User"]
-                query_text:
-                  type: string
-                response_text:
-                  type: string
-                message_meta:
-                  type: object
-                source_chunks:
-                  type: array
-                order_index:
-                  type: integer
-      responses:
-        "201":
-          description: User interaction created successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  session_id:
-                    type: string
-                    format: uuid
-                  sender_role:
-                    type: string
-                    enum: ["AI", "User"]
-                  query_text:
-                    type: string
-                  response_text:
-                    type: string
-                  message_meta:
-                    type: object
-                  source_chunks:
-                    type: array
-                  created_at:
-                    type: string
-                    format: date-time
-                  order_index:
-                    type: integer
-        "400":
-          description: Invalid request
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-      x-amazon-apigateway-request-validator: all
-
   /user/{user_id}/chat_sessions/{chat_session_id}/chat_history:
     <<: *commonOptions
     get:
@@ -1685,462 +1784,38 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
-  /user_sessions/{session_id}/analytics:
+  /chat_sessions/user/{user_id}:
     <<: *commonOptions
     get:
       tags:
-        - User
-      summary: Get analytics events for a session
-      operationId: get_session_analytics
+        - ChatSessions
+      summary: Get chat sessions for a specific user
+      operationId: get_chat_sessions_by_user
       security:
         - userAuthorizer: []
       parameters:
-        - name: session_id
+        - name: user_id
           in: path
           required: true
-          description: User session UUID
+          description: User UUID
           schema:
             type: string
             format: uuid
-        - name: limit
-          in: query
-          description: Number of analytics events to return (default 20, max 100)
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
-        - name: offset
-          in: query
-          description: Number of analytics events to skip (default 0)
-          required: false
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
       responses:
         "200":
-          description: List of analytics events for session
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  analytics:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        id:
-                          type: string
-                          format: uuid
-                        user_session_id:
-                          type: string
-                          format: uuid
-                        event_type:
-                          type: string
-                        properties:
-                          type: object
-                        created_at:
-                          type: string
-                          format: date-time
-                  pagination:
-                    type: object
-                    properties:
-                      limit:
-                        type: integer
-                      offset:
-                        type: integer
-                      total:
-                        type: integer
-                      hasMore:
-                        type: boolean
+          description: List of chat sessions
         "400":
-          description: Invalid parameters
+          description: Bad request
         "401":
           description: Unauthorized
         "500":
           description: Internal Server Error
       x-amazon-apigateway-integration:
         uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${chatSessionFunction.Arn}/invocations
         passthroughBehavior: "when_no_match"
         httpMethod: POST
         type: aws_proxy
-    post:
-      tags:
-        - User
-      summary: Create analytics event for session
-      operationId: create_session_analytics
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: session_id
-          in: path
-          required: true
-          description: User session UUID
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required:
-                - event_type
-              properties:
-                event_type:
-                  type: string
-                  maxLength: 128
-                properties:
-                  type: object
-      responses:
-        "201":
-          description: Analytics event created successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  user_session_id:
-                    type: string
-                    format: uuid
-                  event_type:
-                    type: string
-                  properties:
-                    type: object
-                  created_at:
-                    type: string
-                    format: date-time
-        "400":
-          description: Invalid request
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-      x-amazon-apigateway-request-validator: all
-
-  /interactions/{interaction_id}:
-    <<: *commonOptions
-    get:
-      tags:
-        - User
-      summary: Get a specific user interaction by ID
-      operationId: get_interaction_by_id
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: interaction_id
-          in: path
-          required: true
-          description: Interaction UUID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: User interaction details
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  session_id:
-                    type: string
-                    format: uuid
-                  sender_role:
-                    type: string
-                    enum: ["AI", "User"]
-                  query_text:
-                    type: string
-                  response_text:
-                    type: string
-                  message_meta:
-                    type: object
-                  source_chunks:
-                    type: array
-                  created_at:
-                    type: string
-                    format: date-time
-                  order_index:
-                    type: integer
-        "404":
-          description: Interaction not found
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-    put:
-      tags:
-        - User
-      summary: Update a specific user interaction
-      operationId: update_interaction
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: interaction_id
-          in: path
-          required: true
-          description: Interaction UUID
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                sender_role:
-                  type: string
-                  enum: ["AI", "User"]
-                query_text:
-                  type: string
-                response_text:
-                  type: string
-                message_meta:
-                  type: object
-                source_chunks:
-                  type: array
-                order_index:
-                  type: integer
-      responses:
-        "200":
-          description: User interaction updated successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  session_id:
-                    type: string
-                    format: uuid
-                  sender_role:
-                    type: string
-                    enum: ["AI", "User"]
-                  query_text:
-                    type: string
-                  response_text:
-                    type: string
-                  message_meta:
-                    type: object
-                  source_chunks:
-                    type: array
-                  created_at:
-                    type: string
-                    format: date-time
-                  order_index:
-                    type: integer
-        "404":
-          description: Interaction not found
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-    delete:
-      tags:
-        - User
-      summary: Delete a specific user interaction
-      operationId: delete_interaction
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: interaction_id
-          in: path
-          required: true
-          description: Interaction UUID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: User interaction deleted successfully
-        "404":
-          description: Interaction not found
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-
-  /analytics/{analytics_id}:
-    <<: *commonOptions
-    get:
-      tags:
-        - User
-      summary: Get a specific analytics event by ID
-      operationId: get_analytics_by_id
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: analytics_id
-          in: path
-          required: true
-          description: Analytics event UUID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "200":
-          description: Analytics event details
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  user_session_id:
-                    type: string
-                    format: uuid
-                  event_type:
-                    type: string
-                  properties:
-                    type: object
-                  created_at:
-                    type: string
-                    format: date-time
-        "404":
-          description: Analytics event not found
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-    put:
-      tags:
-        - User
-      summary: Update a specific analytics event
-      operationId: update_analytics
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: analytics_id
-          in: path
-          required: true
-          description: Analytics event UUID
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                event_type:
-                  type: string
-                  maxLength: 128
-                properties:
-                  type: object
-      responses:
-        "200":
-          description: Analytics event updated successfully
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  id:
-                    type: string
-                    format: uuid
-                  user_session_id:
-                    type: string
-                    format: uuid
-                  event_type:
-                    type: string
-                  properties:
-                    type: object
-                  created_at:
-                    type: string
-                    format: date-time
-        "404":
-          description: Analytics event not found
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-    delete:
-      tags:
-        - User
-      summary: Delete a specific analytics event
-      operationId: delete_analytics
-      security:
-        - userAuthorizer: []
-      parameters:
-        - name: analytics_id
-          in: path
-          required: true
-          description: Analytics event UUID
-          schema:
-            type: string
-            format: uuid
-      responses:
-        "204":
-          description: Analytics event deleted successfully
-        "404":
-          description: Analytics event not found
-        "401":
-          description: Unauthorized
-        "500":
-          description: Internal Server Error
-      x-amazon-apigateway-integration:
-        uri:
-          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${userFunction.Arn}/invocations
-        passthroughBehavior: "when_no_match"
-        httpMethod: POST
-        type: aws_proxy
-
-
 
   /chat_sessions:
     <<: *commonOptions
