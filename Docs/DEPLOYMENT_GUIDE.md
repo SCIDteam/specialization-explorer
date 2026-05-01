@@ -551,6 +551,56 @@ You can now navigate to the web app URL (found in the Amplify console) to see yo
 
 **Default URL format:** `https://main.<app-id>.amplifyapp.com`
 
+### Adding Custom Allowed Origins
+
+The application stores allowed CORS origins in an SSM parameter (`/<STACK-PREFIX>-Api/API/AllowedOrigins`). The Amplify URL is added automatically during deployment. If you need to allow additional origins (e.g., a custom domain or localhost for development), update the parameter manually:
+
+<details>
+<summary>macOS/Linux</summary>
+
+```bash
+# First, read the current value
+aws ssm get-parameter \
+  --name "/<STACK-PREFIX>-Api/API/AllowedOrigins" \
+  --profile <YOUR-PROFILE-NAME> \
+  --query Parameter.Value --output text
+
+# Then update with the new origin appended (comma-separated, no trailing slashes)
+aws ssm put-parameter \
+  --name "/<STACK-PREFIX>-Api/API/AllowedOrigins" \
+  --value "https://main.abc123.amplifyapp.com,https://your-custom-domain.com" \
+  --type String \
+  --overwrite \
+  --profile <YOUR-PROFILE-NAME>
+```
+
+</details>
+
+<details>
+<summary>PowerShell</summary>
+
+```powershell
+# First, read the current value
+aws ssm get-parameter `
+  --name "/<STACK-PREFIX>-Api/API/AllowedOrigins" `
+  --profile <YOUR-PROFILE-NAME> `
+  --query Parameter.Value --output text
+
+# Then update with the new origin appended (comma-separated, no trailing slashes)
+aws ssm put-parameter `
+  --name "/<STACK-PREFIX>-Api/API/AllowedOrigins" `
+  --value "https://main.abc123.amplifyapp.com,https://your-custom-domain.com" `
+  --type String `
+  --overwrite `
+  --profile <YOUR-PROFILE-NAME>
+```
+
+</details>
+
+&nbsp;
+
+_Note: Always read the current value first and append your new origin to avoid removing existing ones. Origins should not have trailing slashes. Subsequent CDK deployments will not duplicate existing origins._
+
 ## Troubleshooting
 
 ### Common Issues

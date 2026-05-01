@@ -100,49 +100,20 @@ export class AmplifyStack extends cdk.Stack {
     // -- UPDATE THE SSM PARAMETER TO POINT TO THE AMPLIFY APP URL --
     const amplifyUrl = `https://${branch}.${amplifyApp.appId}.amplifyapp.com`;
 
-    // Read the current SSM parameter value
-    const existingAllowedOriginsRaw = cdk.aws_ssm.StringParameter.valueForStringParameter(
-      this,
-      props.allowedOriginsParamName
-    );
-
-    // Merge existing origins + amplify URL, dedupe, normalize
-    const mergedAllowedOrigins = Array.from(
-      new Set(
-        existingAllowedOriginsRaw
-          .split(",")
-          .map((origin) => origin.trim().replace(/\/$/, ""))
-          .filter((origin) => origin.length > 0)
-          .concat(amplifyUrl.replace(/\/$/, ""))
-      )
-    );
-
-    const mergedAllowedOriginsValue = mergedAllowedOrigins.join(",");
-
-    // Update SSM parameter with merged list
+    // Set the allowed origins to the Amplify URL.
+    // To add additional origins (e.g. custom domains), update the SSM parameter manually.
+    // See Docs/DEPLOYMENT_GUIDE.md for instructions.
     new cdk.custom_resources.AwsCustomResource(this, "UpdateSSMAllowedOrigins", {
       onCreate: {
         service: "SSM",
         action: "putParameter",
         parameters: {
           Name: props.allowedOriginsParamName,
-          Value: mergedAllowedOriginsValue,
+          Value: amplifyUrl,
           Type: "String",
           Overwrite: true,
         },
-        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of(
-          "UpdateSSMAllowedOrigins"
-        ),
-      },
-      onUpdate: {
-        service: "SSM",
-        action: "putParameter",
-        parameters: {
-          Name: props.allowedOriginsParamName,
-          Value: mergedAllowedOriginsValue,
-          Type: "String",
-          Overwrite: true,
-        },
+        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of("UpdateSSMAllowedOrigins"),
       },
       policy: cdk.custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [
@@ -151,36 +122,24 @@ export class AmplifyStack extends cdk.Stack {
       }),
     });
 
-    const corsConfig = {
-      CORSRules: [
-        {
-          AllowedHeaders: ["*"],
-          AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"],
-          AllowedOrigins: mergedAllowedOrigins,
-          ExposeHeaders: ["ETag"],
-        },
-      ],
-    };
-
     new cdk.custom_resources.AwsCustomResource(this, "UpdateS3BucketCors", {
       onCreate: {
         service: "S3",
         action: "putBucketCors",
         parameters: {
           Bucket: props.knowledgeBaseBucketName,
-          CORSConfiguration: corsConfig,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                AllowedHeaders: ["*"],
+                AllowedMethods: ["GET", "PUT", "POST", "DELETE", "HEAD"],
+                AllowedOrigins: [amplifyUrl],
+                ExposeHeaders: ["ETag"],
+              },
+            ],
+          },
         },
-        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of(
-          "UpdateS3BucketCors"
-        ),
-      },
-      onUpdate: {
-        service: "S3",
-        action: "putBucketCors",
-        parameters: {
-          Bucket: props.knowledgeBaseBucketName,
-          CORSConfiguration: corsConfig,
-        },
+        physicalResourceId: cdk.custom_resources.PhysicalResourceId.of("UpdateS3BucketCors"),
       },
       policy: cdk.custom_resources.AwsCustomResourcePolicy.fromSdkCalls({
         resources: [`arn:aws:s3:::${props.knowledgeBaseBucketName}`],
