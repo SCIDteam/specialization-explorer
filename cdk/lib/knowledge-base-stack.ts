@@ -138,12 +138,25 @@ export class KnowledgeBaseStack extends Stack {
       resources: [embeddingModelArn],
     }));
 
+    // Dedicated bucket for S3 server access logs
+    const accessLogsBucket = new s3.Bucket(this, "KnowledgeBaseAccessLogsBucket", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: RemovalPolicy.DESTROY,
+      autoDeleteObjects: true,
+      enforceSSL: true,
+      versioned: true,
+      objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_PREFERRED,
+    });
+
     // Use account and region for uniqueness (see https://aws.amazon.com/blogs/aws/introducing-account-regional-namespaces-for-amazon-s3-general-purpose-buckets/)
     this.knowledgeBaseBucket = new s3.Bucket(this, "KnowledgeBaseBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
       enforceSSL: true,
+      versioned: true,
+      serverAccessLogsBucket: accessLogsBucket,
+      serverAccessLogsPrefix: "kb-bucket-access-logs/",
       cors: [{
         allowedHeaders: ["*"],
         allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST, s3.HttpMethods.DELETE],
@@ -392,6 +405,11 @@ export class KnowledgeBaseStack extends Stack {
     new CfnOutput(this, "KnowledgeBaseBucketName", {
       value: this.knowledgeBaseBucket.bucketName,
       description: "The name of the S3 bucket for knowledge base documents",
+    });
+
+    new CfnOutput(this, "KnowledgeBaseAccessLogsBucketName", {
+      value: accessLogsBucket.bucketName,
+      description: "The name of the S3 bucket storing access logs for the knowledge base bucket",
     });
 
     new CfnOutput(this, "KnowledgeBaseBucketArn", {
