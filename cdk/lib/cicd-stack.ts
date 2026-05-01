@@ -7,6 +7,7 @@ import * as codepipeline_actions from "aws-cdk-lib/aws-codepipeline-actions";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as codeconnections from "aws-cdk-lib/aws-codeconnections";
+import * as s3 from "aws-cdk-lib/aws-s3";
 
 interface LambdaConfig {
   name: string; // Module name (e.g., "textGeneration")
@@ -63,9 +64,25 @@ export class CICDStack extends cdk.Stack {
     // Create artifacts for pipeline
     const sourceOutput = new codepipeline.Artifact();
 
+    // Explicit artifact bucket with access logging
+    const artifactAccessLogsBucket = new s3.Bucket(this, "ArtifactAccessLogs", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      enforceSSL: true,
+    });
+
+    const artifactBucket = new s3.Bucket(this, "PipelineArtifactBucket", {
+      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      enforceSSL: true,
+      serverAccessLogsBucket: artifactAccessLogsBucket,
+      serverAccessLogsPrefix: "pipeline-artifacts/",
+    });
+
     // Create the pipeline
     const pipeline = new codepipeline.Pipeline(this, "DockerImagePipeline", {
       pipelineName: this.pipelineName,
+      artifactBucket: artifactBucket,
     });
 
     const username = cdk.aws_ssm.StringParameter.valueForStringParameter(

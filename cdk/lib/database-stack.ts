@@ -123,6 +123,8 @@ export class DatabaseStack extends Stack {
       allocatedStorage: 100,
       maxAllocatedStorage: 150,
       allowMajorVersionUpgrade: false,
+      enablePerformanceInsights: true,
+      performanceInsightRetention: rds.PerformanceInsightRetention.DEFAULT,
       autoMinorVersionUpgrade: true,
       backupRetention: Duration.days(7),
       deleteAutomatedBackups: true,
