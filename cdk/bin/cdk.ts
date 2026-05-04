@@ -46,7 +46,7 @@ const cicdStack = new CICDStack(app, `${StackPrefix}-CICD`, {
   lambdaFunctions: [
     {
       name: "vectorIndexManagerSigV4",
-      functionName: `${StackPrefix}-KnowledgeBase-VectorIndexManagerFn`,
+      functionName: `${StackPrefix}-KnowledgeBase-VectorIndexManagerFn-v2`,
       sourceDir: "cdk/lambda/vectorIndexManagerSigV4",
     },
   ],
@@ -60,8 +60,11 @@ const kbStack = new KnowledgeBaseStack(app, `${StackPrefix}-KnowledgeBase`, {
   stackPrefix: StackPrefix,
   vectorIndexManagerRepository: cicdStack.ecrRepositories["vectorIndexManagerSigV4"],
   vectorIndexManagerPipelineName: cicdStack.pipelineName,
+  vpc: vpcStack.vpc,
+  vpcCidr: vpcStack.vpcCidrString,
 });
 kbStack.addDependency(cicdStack);
+kbStack.addDependency(vpcStack);
 
 const apiStack = new ApiGatewayStack(
   app,

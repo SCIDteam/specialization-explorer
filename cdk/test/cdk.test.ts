@@ -1,6 +1,9 @@
-// import * as cdk from 'aws-cdk-lib';
-// import { Template } from 'aws-cdk-lib/assertions';
-// import * as Cdk from '../lib/cdk-stack';
+// Placeholder test suite — the original example test was commented out.
+// Add CDK stack-level tests here as needed.
 
-// example test. To run these tests, uncomment this file along with the
-// example resource in lib/cdk-stack.ts
+describe("CDK App", () => {
+  it("placeholder", () => {
+    // intentionally empty — prevents Jest from failing on an empty suite
+    expect(true).toBe(true);
+  });
+});

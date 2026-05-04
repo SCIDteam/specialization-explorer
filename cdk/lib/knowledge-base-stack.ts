@@ -4,6 +4,7 @@ import * as s3 from "aws-cdk-lib/aws-s3";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as iam from "aws-cdk-lib/aws-iam";
 import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
 import * as opensearchserverless from "aws-cdk-lib/aws-opensearchserverless";
 import { Construct } from "constructs";
@@ -28,6 +29,8 @@ export interface KnowledgeBaseStackProps extends StackProps {
   stackPrefix: string;
   vectorIndexManagerRepository: ecr.IRepository;
   vectorIndexManagerPipelineName: string;
+  vpc: ec2.IVpc;
+  vpcCidr: string;
 }
 
 export class KnowledgeBaseStack extends Stack {
@@ -52,6 +55,31 @@ export class KnowledgeBaseStack extends Stack {
 
     // We also use shorter suffixes for policies: `-enc`, `-net`, `-acc`
     const embeddingModelArn = `arn:aws:bedrock:${this.region}::foundation-model/${EMBEDDING_MODEL_ID}`;
+
+    // Security group for VPC-attached Lambda functions (no inbound, outbound HTTPS only)
+    const lambdaSg = new ec2.SecurityGroup(this, 'LambdaSg', {
+      vpc: props.vpc,
+      description: 'Security group for VPC-attached Lambda functions in KB stack',
+      allowAllOutbound: false,
+    });
+    lambdaSg.addEgressRule(ec2.Peer.anyIpv4(), ec2.Port.tcp(443), 'Allow outbound HTTPS');
+
+    // Security group for AOSS VPC endpoint (inbound HTTPS from VPC CIDR and Lambda SG)
+    const vpcEndpointSg = new ec2.SecurityGroup(this, 'AossVpcEndpointSg', {
+      vpc: props.vpc,
+      description: 'Security group for AOSS VPC endpoint',
+      allowAllOutbound: false,
+    });
+    vpcEndpointSg.addIngressRule(ec2.Peer.ipv4(props.vpcCidr), ec2.Port.tcp(443), 'Allow HTTPS from VPC CIDR');
+    vpcEndpointSg.addIngressRule(lambdaSg, ec2.Port.tcp(443), 'Allow HTTPS from Lambda SG');
+
+    // OpenSearch Serverless VPC endpoint in private subnets
+    const aossVpcEndpoint = new opensearchserverless.CfnVpcEndpoint(this, 'AossVpcEndpoint', {
+      name: `${collectionName}-vpce`,
+      vpcId: props.vpc.vpcId,
+      subnetIds: props.vpc.privateSubnets.map(s => s.subnetId),
+      securityGroupIds: [vpcEndpointSg.securityGroupId],
+    });
 
     // Account-level capacity limits set to minimum 2/2 OCUs
     new AwsCustomResource(this, "OSSCapacityLimits", {
@@ -87,7 +115,7 @@ export class KnowledgeBaseStack extends Stack {
       }),
     });
 
-    // Create network policy for OpenSearch Serverless
+    // Create network policy for OpenSearch Serverless (private access via VPC endpoint and Bedrock service)
     const networkPolicy = new opensearchserverless.CfnSecurityPolicy(this, "NetworkPolicy", {
       name: `${collectionName}-net`,
       type: "network",
@@ -96,9 +124,12 @@ export class KnowledgeBaseStack extends Stack {
           { ResourceType: "collection", Resource: [`collection/${collectionName}`] },
           { ResourceType: "dashboard", Resource: [`collection/${collectionName}`] },
         ],
-        AllowFromPublic: true,
+        AllowFromPublic: false,
+        SourceVPCEs: [aossVpcEndpoint.attrId],
+        SourceServices: ['bedrock.amazonaws.com'],
       }]),
     });
+    networkPolicy.addDependency(aossVpcEndpoint); // Ensure VPC endpoint exists first
 
     // IAM role for Bedrock Knowledge Base
     const knowledgeBaseRole = new iam.Role(this, "KnowledgeBaseRole", {
@@ -218,15 +249,29 @@ export class KnowledgeBaseStack extends Stack {
       },
     });
 
+    // ENI permissions for VPC-attached Lambda execution
+    vectorIndexManagerRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'ec2:CreateNetworkInterface',
+        'ec2:DescribeNetworkInterfaces',
+        'ec2:DeleteNetworkInterface',
+      ],
+      resources: ['*'],
+    }));
+
     // Vector Index Manager Lambda
     const vectorIndexManagerFn = new lambda.DockerImageFunction(this, "VectorIndexManagerFn", {
       role: vectorIndexManagerRole,
       timeout: cdk.Duration.minutes(2),
       memorySize: 512,
-      functionName: `${props.stackPrefix}-KnowledgeBase-VectorIndexManagerFn`,
+      functionName: `${props.stackPrefix}-KnowledgeBase-VectorIndexManagerFn-v2`,
       code: lambda.DockerImageCode.fromEcr(props.vectorIndexManagerRepository, {
         tagOrDigest: "latest",
       }),
+      vpc: props.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [lambdaSg],
     });
     vectorIndexManagerFn.node.addDependency(ecrImageWaiter);
 
@@ -310,6 +355,17 @@ export class KnowledgeBaseStack extends Stack {
       resources: ["*"], 
     }));
 
+    // ENI permissions for VPC-attached Lambda execution
+    kbProvisionerRole.addToPolicy(new iam.PolicyStatement({
+      effect: iam.Effect.ALLOW,
+      actions: [
+        'ec2:CreateNetworkInterface',
+        'ec2:DescribeNetworkInterfaces',
+        'ec2:DeleteNetworkInterface',
+      ],
+      resources: ['*'],
+    }));
+
     const kbProvisionerFn = new lambda.Function(this, "KBProvisionerFn", {
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: "main.handler",
@@ -317,6 +373,9 @@ export class KnowledgeBaseStack extends Stack {
       timeout: cdk.Duration.minutes(15),
       memorySize: 512,
       code: lambda.Code.fromAsset("lambda/knowledgeBaseProvisioner"),
+      vpc: props.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+      securityGroups: [lambdaSg],
     });
 
     const kbProvisionerProvider = new Provider(this, "KBProvisionerProvider", {
