@@ -748,7 +748,7 @@ curl -X POST "https://{api-id}.execute-api.{region}.amazonaws.com/prod/admin/dat
 
 ### Generate Presigned Upload URL
 
-Generate an S3 presigned URL for uploading knowledge base files (e.g. CSV).
+Generate an S3 presigned URL for uploading a single knowledge base file.
 
 **Endpoint:** `GET /admin/generate-presigned-url`
 
@@ -772,6 +772,122 @@ Generate an S3 presigned URL for uploading knowledge base files (e.g. CSV).
 ```bash
 curl -X GET "https://{api-id}.execute-api.{region}.amazonaws.com/prod/admin/generate-presigned-url?file_name=data.csv&content_type=text/csv" \
   -H "Authorization: eyJraWQiOiJ..."
+```
+
+---
+
+### Generate Presigned Upload URLs (Batch)
+
+Generate presigned S3 upload URLs for multiple files in a single request. Use this for zip uploads to avoid hitting WAF rate limits from calling the single-file endpoint in a loop.
+
+**Endpoint:** `POST /admin/generate-presigned-urls/batch`
+
+**Request Body:**
+
+```json
+{
+  "files": [
+    { "file_name": "alumni.csv", "content_type": "text/csv" },
+    { "file_name": "alumni.csv.metadata.json", "content_type": "application/json" },
+    { "file_name": "courses.md", "content_type": "text/markdown" },
+    { "file_name": "courses.md.metadata.json", "content_type": "application/json" }
+  ]
+}
+```
+
+**Parameters:**
+
+- `files` (array, required): Up to 200 file descriptors
+  - `file_name` (string, required): File name (max 255 chars)
+  - `content_type` (string, optional): MIME type (default: `application/octet-stream`)
+
+**Response:**
+
+```json
+{
+  "presigned_urls": [
+    {
+      "file_name": "alumni.csv",
+      "presigned_url": "https://s3.amazonaws.com/bucket/path?...",
+      "key": "uploads/csv/1712345678_alumni.csv",
+      "bucket": "my-kb-bucket"
+    }
+  ]
+}
+```
+
+**Notes:**
+- Presigned URLs expire after 10 minutes
+- S3 uploads go directly to S3 and do not pass through WAF
+- Supported content types: `text/csv`, `text/markdown`, `application/json`, `text/json`, `application/octet-stream`
+
+**Example (cURL):**
+
+```bash
+curl -X POST "https://{api-id}.execute-api.{region}.amazonaws.com/prod/admin/generate-presigned-urls/batch" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"files": [{"file_name": "alumni.csv", "content_type": "text/csv"}]}'
+```
+
+---
+
+### Stage Data Sources (Batch)
+
+Stage multiple CSV/Markdown + metadata JSON file pairs in a single request. Designed for zip uploads. Duplicates are silently skipped.
+
+**Endpoint:** `POST /admin/data_sources/batch`
+
+**Request Body:**
+
+```json
+{
+  "created_by": "admin@example.com",
+  "items": [
+    {
+      "type": "csv",
+      "primary_file_name": "alumni.csv",
+      "primary_s3_bucket": "my-kb-bucket",
+      "primary_s3_key": "uploads/csv/1712345678_alumni.csv",
+      "metadata_file_name": "alumni.csv.metadata.json",
+      "metadata_s3_bucket": "my-kb-bucket",
+      "metadata_s3_key": "uploads/json/1712345678_alumni.csv.metadata.json"
+    }
+  ]
+}
+```
+
+**Parameters:**
+
+- `created_by` (string, required): Admin email
+- `items` (array, required): Up to 100 file pairs
+  - `type` (string, required): `csv` or `markdown`
+  - `primary_file_name` (string, required): CSV or Markdown file name
+  - `primary_s3_bucket` / `primary_s3_key` (string, required): S3 location of the primary file
+  - `metadata_file_name` (string, required): Must match `{primary_file_name}.metadata.json`
+  - `metadata_s3_bucket` / `metadata_s3_key` (string, required): S3 location of the metadata file
+
+**Response:**
+
+```json
+{
+  "message": "Batch staging complete. 2 staged, 1 skipped, 0 failed.",
+  "staged_count": 2,
+  "skipped_count": 1,
+  "error_count": 0,
+  "staged": [{ "index": 0, "file": "alumni.csv", "data_source_ids": ["uuid", "uuid"] }],
+  "skipped": [{ "index": 1, "file": "courses.csv", "reason": "already_staged" }],
+  "errors": []
+}
+```
+
+**Example (cURL):**
+
+```bash
+curl -X POST "https://{api-id}.execute-api.{region}.amazonaws.com/prod/admin/data_sources/batch" \
+  -H "Authorization: eyJraWQiOiJ..." \
+  -H "Content-Type: application/json" \
+  -d '{"created_by": "admin@example.com", "items": [...]}'
 ```
 
 ---

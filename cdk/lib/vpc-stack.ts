@@ -20,7 +20,7 @@ export class VpcStack extends Stack {
     props: StackProps & { stackPrefix: string }
   ) {
     super(scope, id, props);
-
+    // TODO: Remove existing vpcId and ControlTowerStackSet before going public
     const existingVpcId: string = "vpc-0515a0d6ee4abcd8e"; // CHANGE IF DEPLOYING WITH EXISTING VPC
 
     if (existingVpcId !== "") {
