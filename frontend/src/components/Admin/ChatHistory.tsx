@@ -1,4 +1,8 @@
 import { useState, useEffect } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import rehypeSanitize from "rehype-sanitize";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Bot, User, MessageSquare, ChevronDown, ChevronRight, Clock, RefreshCw } from "lucide-react";
 import { AuthService } from "@/functions/authService";
@@ -388,12 +392,50 @@ export default function ChatHistory() {
                                             </div>
 
                                             <div className={cn(
-                                                "p-5 rounded-2xl shadow-sm text-[15px] whitespace-pre-wrap leading-relaxed",
+                                                "p-5 rounded-2xl shadow-sm text-[15px] leading-relaxed",
                                                 isUser
                                                     ? "bg-primary text-primary-foreground rounded-tr-sm"
                                                     : "bg-gray-50 border border-gray-200 text-gray-800 rounded-tl-sm shadow-md"
                                             )}>
-                                                {msg.content}
+                                                {isUser ? (
+                                                    <span className="whitespace-pre-wrap">{msg.content}</span>
+                                                ) : (
+                                                    <ReactMarkdown
+                                                        remarkPlugins={[remarkGfm]}
+                                                        rehypePlugins={[rehypeSanitize, rehypeHighlight]}
+                                                        components={{
+                                                            h1: ({ ...props }) => <h1 className="text-xl font-bold mb-4 mt-6" {...props} />,
+                                                            h2: ({ ...props }) => <h2 className="text-lg font-bold mb-3 mt-5" {...props} />,
+                                                            h3: ({ ...props }) => <h3 className="text-base font-bold mb-2 mt-4" {...props} />,
+                                                            p: ({ ...props }) => <p className="mb-4 last:mb-0" {...props} />,
+                                                            ul: ({ ...props }) => <ul className="list-disc pl-5 mb-4" {...props} />,
+                                                            ol: ({ ...props }) => <ol className="list-decimal pl-5 mb-4" {...props} />,
+                                                            li: ({ ...props }) => <li className="mb-1" {...props} />,
+                                                            a: ({ ...props }) => (
+                                                                <a {...props} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline" />
+                                                            ),
+                                                            code: ({ className, children, ...props }: any) => {
+                                                                const isInline = !(/language-(\w+)/.exec(className || "")) && props.inline;
+                                                                return isInline ? (
+                                                                    <code className="px-1 py-0.5 bg-muted rounded text-xs" {...props}>{children}</code>
+                                                                ) : (
+                                                                    <code className="block p-2 bg-muted rounded-md text-xs overflow-auto" {...props}>{children}</code>
+                                                                );
+                                                            },
+                                                            pre: ({ ...props }) => <pre className="bg-muted p-2 rounded-md overflow-auto text-xs my-2" {...props} />,
+                                                            blockquote: ({ ...props }) => <blockquote className="pl-4 border-l-4 border-muted italic my-4" {...props} />,
+                                                            table: ({ ...props }) => (
+                                                                <div className="overflow-x-auto">
+                                                                    <table className="border-collapse border border-muted text-xs w-full my-4" {...props} />
+                                                                </div>
+                                                            ),
+                                                            th: ({ ...props }) => <th className="border border-muted px-2 py-1 bg-muted" {...props} />,
+                                                            td: ({ ...props }) => <td className="border border-muted px-2 py-1" {...props} />,
+                                                        }}
+                                                    >
+                                                        {msg.content}
+                                                    </ReactMarkdown>
+                                                )}
                                             </div>
 
                                             {/* Display Sources (if AI and sources exist) */}

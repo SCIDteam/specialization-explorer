@@ -377,6 +377,7 @@ export class ApiGatewayStack extends cdk.Stack {
       },
       rules: [
         // Rule 1: AWS Managed Common Rule Set (SQL injection, XSS, etc.)
+        // SizeRestrictions_BODY is excluded for batch admin endpoints which send large JSON payloads
         {
           name: "AWS-AWSManagedRulesCommonRuleSet",
           priority: 1,
@@ -384,6 +385,38 @@ export class ApiGatewayStack extends cdk.Stack {
             managedRuleGroupStatement: {
               vendorName: "AWS",
               name: "AWSManagedRulesCommonRuleSet",
+              ruleActionOverrides: [
+                {
+                  name: "SizeRestrictions_BODY",
+                  actionToUse: { count: {} },
+                },
+              ],
+              scopeDownStatement: {
+                notStatement: {
+                  statement: {
+                    orStatement: {
+                      statements: [
+                        {
+                          byteMatchStatement: {
+                            searchString: "/admin/generate-presigned-urls/batch",
+                            fieldToMatch: { uriPath: {} },
+                            textTransformations: [{ priority: 0, type: "NONE" }],
+                            positionalConstraint: "ENDS_WITH",
+                          },
+                        },
+                        {
+                          byteMatchStatement: {
+                            searchString: "/admin/data_sources/batch",
+                            fieldToMatch: { uriPath: {} },
+                            textTransformations: [{ priority: 0, type: "NONE" }],
+                            positionalConstraint: "ENDS_WITH",
+                          },
+                        },
+                      ],
+                    },
+                  },
+                },
+              },
             },
           },
           overrideAction: { none: {} },
