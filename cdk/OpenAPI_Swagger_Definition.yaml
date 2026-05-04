@@ -530,6 +530,131 @@ paths:
         httpMethod: POST
         type: aws_proxy
 
+  /admin/generate-presigned-urls/batch:
+    <<: *commonOptions
+    post:
+      tags:
+        - Admin
+      summary: Generate pre-signed URLs for multiple files in a single request (batch zip upload)
+      operationId: generate_presigned_urls_batch
+      security:
+        - adminAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [files]
+              properties:
+                files:
+                  type: array
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [file_name]
+                    properties:
+                      file_name:
+                        type: string
+                        maxLength: 255
+                      content_type:
+                        type: string
+                        default: "application/octet-stream"
+      responses:
+        "200":
+          description: Pre-signed URLs generated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presigned_urls:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        file_name: { type: string }
+                        presigned_url: { type: string }
+                        key: { type: string }
+                        bucket: { type: string }
+        "400":
+          description: Bad Request
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
+  /admin/data_sources/batch:
+    <<: *commonOptions
+    post:
+      tags: [Admin]
+      summary: Stage multiple CSV/Markdown + metadata JSON pairs in one request
+      operationId: stage_data_sources_batch
+      security:
+        - adminAuthorizer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [created_by, items]
+              properties:
+                created_by:
+                  type: string
+                  example: admin@example.com
+                items:
+                  type: array
+                  maxItems: 100
+                  items:
+                    type: object
+                    required: [type, primary_file_name, primary_s3_bucket, primary_s3_key, metadata_file_name, metadata_s3_bucket, metadata_s3_key]
+                    properties:
+                      type:
+                        type: string
+                        enum: [csv, markdown]
+                      primary_file_name: { type: string }
+                      primary_s3_bucket: { type: string }
+                      primary_s3_key: { type: string }
+                      metadata_file_name: { type: string }
+                      metadata_s3_bucket: { type: string }
+                      metadata_s3_key: { type: string }
+      responses:
+        "200":
+          description: Batch staging complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  staged_count: { type: integer }
+                  skipped_count: { type: integer }
+                  error_count: { type: integer }
+                  staged:
+                    type: array
+                    items: { type: object }
+                  skipped:
+                    type: array
+                    items: { type: object }
+                  errors:
+                    type: array
+                    items: { type: object }
+        "400":
+          description: Bad Request
+        "500":
+          description: Internal Server Error
+      x-amazon-apigateway-integration:
+        uri:
+          Fn::Sub: arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaKnowledgeBase.Arn}/invocations
+        passthroughBehavior: "when_no_match"
+        httpMethod: POST
+        type: aws_proxy
+
   /admin/system-settings:
     <<: *commonOptions
     get:

@@ -6,8 +6,10 @@ import logging
 import psycopg2
 
 from helpers.stage_data_sources import stage_data_sources
+from helpers.stage_data_sources_batch import stage_data_sources_batch
 from helpers.start_ingestion_job import start_ingestion_job
 from helpers.generate_presigned_url import generate_presigned_url
+from helpers.generate_presigned_urls_batch import generate_presigned_urls_batch
 from helpers.update_status import update_status
 
 # Set up logging
@@ -123,6 +125,17 @@ def handler(event, context=None):
         ):
             return generate_presigned_url(event=event)
 
+        # Route: POST /admin/generate-presigned-urls/batch
+        if method == "POST" and (
+            resource == "/admin/generate-presigned-urls/batch"
+            or path.endswith("/admin/generate-presigned-urls/batch")
+        ):
+            try:
+                body = _parse_body(event)
+            except ValueError as e:
+                return _response(event, 400, {"error": str(e)})
+            return generate_presigned_urls_batch(event=event, body=body)
+
         try:
             body = _parse_body(event)
         except ValueError as e:
@@ -141,6 +154,13 @@ def handler(event, context=None):
             or path.endswith("/admin/data_sources")
         ):
             return stage_data_sources(event=event, body=body, connection=connection)
+
+        # Route: POST /admin/data_sources/batch
+        if method == "POST" and (
+            resource == "/admin/data_sources/batch"
+            or path.endswith("/admin/data_sources/batch")
+        ):
+            return stage_data_sources_batch(event=event, body=body, connection=connection)
 
         # Everything below this point needs KB ID
         try:

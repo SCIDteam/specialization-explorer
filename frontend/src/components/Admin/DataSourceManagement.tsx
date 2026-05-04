@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import JSZip from "jszip";
 import {
   Search,
   Upload,
@@ -10,6 +11,7 @@ import {
   AlertTriangle,
   MessageCircleMore,
   Play,
+  Archive,
 } from "lucide-react";
 import { AuthService } from "@/functions/authService";
 import { getCurrentUser } from "aws-amplify/auth";
@@ -82,6 +84,20 @@ type PresignedUploadResponse = {
   presignedUrl: string;
   bucket: string;
   key: string;
+};
+
+type BatchPresignedUrlEntry = {
+  file_name: string;
+  presigned_url: string;
+  key: string;
+  bucket: string;
+};
+
+type ZipFilePair = {
+  primaryFile: File;
+  metadataFile: File;
+  type: "csv" | "markdown";
+  error?: string;
 };
 
 function formatDateTime(iso?: string | null) {
@@ -186,6 +202,19 @@ export default function DataSourceManagement() {
   const [metadataFile, setMetadataFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<{
+    type: "success" | "error" | null;
+    message: string;
+  }>({ type: null, message: "" });
+
+  // Upload tab: "single" | "zip"
+  const [uploadTab, setUploadTab] = useState<"single" | "zip">("single");
+
+  // Zip upload state
+  const [zipFile, setZipFile] = useState<File | null>(null);
+  const [zipPairs, setZipPairs] = useState<ZipFilePair[]>([]);
+  const [zipValidating, setZipValidating] = useState(false);
+  const [zipUploading, setZipUploading] = useState(false);
+  const [zipStatus, setZipStatus] = useState<{
     type: "success" | "error" | null;
     message: string;
   }>({ type: null, message: "" });
@@ -513,6 +542,220 @@ export default function DataSourceManagement() {
     setPrimaryFile(null);
     setMetadataFile(null);
     setUploadStatus({ type: null, message: "" });
+    setUploadTab("single");
+    setZipFile(null);
+    setZipPairs([]);
+    setZipStatus({ type: null, message: "" });
+  };
+
+  const handleZipSelect = async (file: File) => {
+    setZipStatus({ type: null, message: "" });
+    setZipPairs([]);
+
+    if (!file.name.toLowerCase().endsWith(".zip")) {
+      setZipStatus({ type: "error", message: "Only .zip files are allowed." });
+      return;
+    }
+    if (file.size > 200 * 1024 * 1024) {
+      setZipStatus({ type: "error", message: "Zip file must be less than 200MB." });
+      return;
+    }
+
+    setZipFile(file);
+    setZipValidating(true);
+
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const allNames = Object.keys(zip.files).filter((n) => !zip.files[n].dir);
+
+      // Build a map of name -> JSZip file entry (basename only, ignore subdirs)
+      const fileMap = new Map<string, JSZip.JSZipObject>();
+      for (const name of allNames) {
+        const base = name.split("/").pop()!;
+        fileMap.set(base, zip.files[name]);
+      }
+
+      const pairs: ZipFilePair[] = [];
+      const seen = new Set<string>();
+
+      for (const [baseName, entry] of fileMap) {
+        // Skip metadata files — they'll be matched from the primary side
+        if (baseName.endsWith(".metadata.json")) continue;
+
+        const isCsv = baseName.toLowerCase().endsWith(".csv");
+        const isMd = baseName.toLowerCase().endsWith(".md") || baseName.toLowerCase().endsWith(".markdown");
+        if (!isCsv && !isMd) continue;
+        if (seen.has(baseName)) continue;
+        seen.add(baseName);
+
+        const expectedMeta = `${baseName}.metadata.json`;
+        const metaEntry = fileMap.get(expectedMeta);
+
+        const primaryBlob = await entry.async("blob");
+        const primaryFileObj = new File(
+          [primaryBlob],
+          baseName,
+          { type: isCsv ? "text/csv" : "text/markdown" }
+        );
+
+        if (!metaEntry) {
+          pairs.push({
+            primaryFile: primaryFileObj,
+            metadataFile: null as unknown as File,
+            type: isCsv ? "csv" : "markdown",
+            error: `Missing metadata file: ${expectedMeta}`,
+          });
+          continue;
+        }
+
+        const metaBlob = await metaEntry.async("blob");
+        const metaFileObj = new File([metaBlob], expectedMeta, { type: "application/json" });
+
+        pairs.push({
+          primaryFile: primaryFileObj,
+          metadataFile: metaFileObj,
+          type: isCsv ? "csv" : "markdown",
+        });
+      }
+
+      if (pairs.length === 0) {
+        setZipStatus({ type: "error", message: "No valid CSV or Markdown files found in the zip." });
+        setZipFile(null);
+      } else {
+        setZipPairs(pairs);
+      }
+    } catch (e) {
+      console.error(e);
+      setZipStatus({ type: "error", message: "Failed to read zip file. Make sure it's a valid zip." });
+      setZipFile(null);
+    } finally {
+      setZipValidating(false);
+    }
+  };
+
+  const handleZipUpload = async () => {
+    const validPairs = zipPairs.filter((p) => !p.error);
+    if (validPairs.length === 0) {
+      setZipStatus({ type: "error", message: "No valid file pairs to upload." });
+      return;
+    }
+    if (!adminEmail) {
+      setZipStatus({ type: "error", message: "Unable to determine the current admin email." });
+      return;
+    }
+
+    try {
+      setZipUploading(true);
+      setZipStatus({ type: null, message: "" });
+
+      const session = await AuthService.getAuthSession(true);
+      const token = session.tokens.idToken;
+
+      // Step 1: Get all presigned URLs in one request
+      const filesPayload = validPairs.flatMap((p) => [
+        {
+          file_name: p.primaryFile.name,
+          content_type: p.type === "csv" ? "text/csv" : "text/markdown",
+        },
+        {
+          file_name: p.metadataFile.name,
+          content_type: "application/json",
+        },
+      ]);
+
+      const batchUrlRes = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/generate-presigned-urls/batch`,
+        {
+          method: "POST",
+          headers: { Authorization: token, "Content-Type": "application/json" },
+          body: JSON.stringify({ files: filesPayload }),
+        }
+      );
+
+      if (!batchUrlRes.ok) {
+        const err = await batchUrlRes.json().catch(() => ({}));
+        throw new Error(err?.error || "Failed to generate presigned URLs");
+      }
+
+      const { presigned_urls } = (await batchUrlRes.json()) as {
+        presigned_urls: BatchPresignedUrlEntry[];
+      };
+
+      // Build a lookup map by file_name
+      const urlMap = new Map<string, BatchPresignedUrlEntry>();
+      for (const entry of presigned_urls) {
+        urlMap.set(entry.file_name, entry);
+      }
+
+      // Step 2: Upload all files to S3 in parallel
+      await Promise.all(
+        validPairs.flatMap((p) => {
+          const primaryEntry = urlMap.get(p.primaryFile.name)!;
+          const metaEntry = urlMap.get(p.metadataFile.name)!;
+          return [
+            fetch(primaryEntry.presigned_url, {
+              method: "PUT",
+              headers: { "Content-Type": p.type === "csv" ? "text/csv" : "text/markdown" },
+              body: p.primaryFile,
+            }),
+            fetch(metaEntry.presigned_url, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: p.metadataFile,
+            }),
+          ];
+        })
+      );
+
+      // Step 3: Stage all pairs in one batch request
+      const stageItems = validPairs.map((p) => {
+        const primaryEntry = urlMap.get(p.primaryFile.name)!;
+        const metaEntry = urlMap.get(p.metadataFile.name)!;
+        return {
+          type: p.type,
+          primary_file_name: p.primaryFile.name,
+          primary_s3_bucket: primaryEntry.bucket,
+          primary_s3_key: primaryEntry.key,
+          metadata_file_name: p.metadataFile.name,
+          metadata_s3_bucket: metaEntry.bucket,
+          metadata_s3_key: metaEntry.key,
+        };
+      });
+
+      const stageRes = await fetch(
+        `${import.meta.env.VITE_API_ENDPOINT}/admin/data_sources/batch`,
+        {
+          method: "POST",
+          headers: { Authorization: token, "Content-Type": "application/json" },
+          body: JSON.stringify({ created_by: adminEmail, items: stageItems }),
+        }
+      );
+
+      const stageJson = await stageRes.json().catch(() => ({}));
+      if (!stageRes.ok) {
+        throw new Error(stageJson?.error || "Batch staging failed");
+      }
+
+      const { staged_count, skipped_count, error_count } = stageJson;
+      setZipStatus({
+        type: error_count > 0 && staged_count === 0 ? "error" : "success",
+        message: `Done. ${staged_count} staged, ${skipped_count} skipped (duplicates), ${error_count} failed.`,
+      });
+
+      await fetchAdminDataSources();
+
+      if (error_count === 0) {
+        setTimeout(() => resetUploadDialog(), 1500);
+      }
+    } catch (e) {
+      console.error(e);
+      setZipStatus({
+        type: "error",
+        message: e instanceof Error ? e.message : "Zip upload failed",
+      });
+    } finally {
+      setZipUploading(false);
+    }
   };
 
   const handleUpload = async () => {
@@ -845,11 +1088,40 @@ export default function DataSourceManagement() {
                   <DialogHeader>
                     <DialogTitle>Upload Data</DialogTitle>
                     <DialogDescription>
-                      Upload the <span className="font-medium">CSV</span> or <span className="font-medium">markdown</span> and its corresponding{" "}
-                      <span className="font-medium">metadata JSON</span>. These files will be staged for the next sync.
+                      Upload files to stage for the next sync.
                     </DialogDescription>
                   </DialogHeader>
 
+                  {/* Tab switcher */}
+                  <div className="flex gap-1 border-b border-gray-200 mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setUploadTab("single")}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        uploadTab === "single"
+                          ? "border-primary text-primary"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <Upload className="inline h-3.5 w-3.5 mr-1.5" />
+                      Single File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setUploadTab("zip")}
+                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                        uploadTab === "zip"
+                          ? "border-primary text-primary"
+                          : "border-transparent text-gray-500 hover:text-gray-700"
+                      }`}
+                    >
+                      <Archive className="inline h-3.5 w-3.5 mr-1.5" />
+                      Zip Upload
+                    </button>
+                  </div>
+
+                  {/* Single file tab */}
+                  {uploadTab === "single" && (
                   <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div className="space-y-2">
@@ -1002,29 +1274,135 @@ export default function DataSourceManagement() {
                       </div>
                     </div>
                   </div>
+                  )}
+
+                  {/* Zip upload tab */}
+                  {uploadTab === "zip" && (
+                  <div className="grid gap-4 py-4">
+                    <div className="text-sm text-gray-600">
+                      Upload a zip containing CSV/Markdown files and their matching{" "}
+                      <code className="bg-gray-100 px-1 rounded">*.metadata.json</code> files.
+                      Duplicates are skipped automatically.
+                    </div>
+
+                    {!zipFile ? (
+                      <div
+                        className="border-2 border-dashed border-gray-300 rounded-lg p-10 text-center hover:bg-gray-50 transition-colors cursor-pointer"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const f = e.dataTransfer.files?.[0];
+                          if (f) handleZipSelect(f);
+                        }}
+                        onClick={() => document.getElementById("zip-upload")?.click()}
+                      >
+                        <div className="flex flex-col items-center gap-2">
+                          {zipValidating ? (
+                            <Loader2 className="h-8 w-8 text-gray-400 animate-spin" />
+                          ) : (
+                            <Archive className="h-8 w-8 text-gray-400" />
+                          )}
+                          <span className="text-sm font-medium text-gray-600">
+                            {zipValidating ? "Validating zip..." : "Drag and drop a .zip file"}
+                          </span>
+                          <span className="text-xs text-gray-400">or click to browse (max 200MB)</span>
+                        </div>
+                        <Input
+                          id="zip-upload"
+                          type="file"
+                          className="hidden"
+                          accept=".zip,application/zip"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f) handleZipSelect(f);
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between border rounded-lg p-3 bg-gray-50">
+                          <div className="flex items-center gap-2">
+                            <Archive className="h-5 w-5 text-primary" />
+                            <span className="text-sm font-medium">{zipFile.name}</span>
+                            <span className="text-xs text-gray-500">{formatSizeMb(zipFile)}</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="text-xs text-gray-400 hover:text-gray-600"
+                            onClick={() => { setZipFile(null); setZipPairs([]); setZipStatus({ type: null, message: "" }); }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+
+                        {zipPairs.length > 0 && (
+                          <div className="border rounded-lg overflow-hidden">
+                            <div className="bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 border-b">
+                              {zipPairs.filter(p => !p.error).length} valid pair(s) · {zipPairs.filter(p => p.error).length} with errors
+                            </div>
+                            <div className="max-h-48 overflow-y-auto divide-y divide-gray-100">
+                              {zipPairs.map((pair, i) => (
+                                <div key={i} className={`flex items-center justify-between px-3 py-2 text-xs ${pair.error ? "bg-red-50" : ""}`}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <FileText className={`h-3.5 w-3.5 flex-shrink-0 ${pair.error ? "text-red-400" : "text-primary"}`} />
+                                    <span className="truncate font-mono">{pair.primaryFile.name}</span>
+                                  </div>
+                                  {pair.error ? (
+                                    <span className="text-red-600 ml-2 flex-shrink-0">{pair.error}</span>
+                                  ) : (
+                                    <span className="text-green-600 ml-2 flex-shrink-0">✓ paired</span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {zipStatus.message && (
+                      <div className={`text-sm p-2 rounded ${zipStatus.type === "success" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"}`}>
+                        {zipStatus.message}
+                      </div>
+                    )}
+                  </div>
+                  )}
 
                   <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={resetUploadDialog}
-                      disabled={uploading}
-                    >
+                    <Button variant="outline" onClick={resetUploadDialog} disabled={uploading || zipUploading}>
                       Cancel
                     </Button>
-                    <Button
-                      className="bg-primary hover:bg-primary/90"
-                      onClick={handleUpload}
-                      disabled={!primaryFile || !metadataFile || uploading}
-                    >
-                      {uploading ? (
-                        <>
-                          <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                          Uploading...
-                        </>
-                      ) : (
-                        "Upload & Stage"
-                      )}
-                    </Button>
+                    {uploadTab === "single" ? (
+                      <Button
+                        className="bg-primary hover:bg-primary/90"
+                        onClick={handleUpload}
+                        disabled={!primaryFile || !metadataFile || uploading}
+                      >
+                        {uploading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          "Upload & Stage"
+                        )}
+                      </Button>
+                    ) : (
+                      <Button
+                        className="bg-primary hover:bg-primary/90"
+                        onClick={handleZipUpload}
+                        disabled={!zipFile || zipPairs.filter(p => !p.error).length === 0 || zipUploading || zipValidating}
+                      >
+                        {zipUploading ? (
+                          <>
+                            <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                            Uploading...
+                          </>
+                        ) : (
+                          `Upload & Stage ${zipPairs.filter(p => !p.error).length} pair(s)`
+                        )}
+                      </Button>
+                    )}
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
