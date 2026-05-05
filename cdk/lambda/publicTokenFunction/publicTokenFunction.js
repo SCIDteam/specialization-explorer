@@ -8,14 +8,17 @@ const { randomUUID } = require("crypto");
 
 const secretsManager = new SecretsManagerClient();
 let cachedSecret;
+let cacheExpiry = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 exports.handler = async (event) => {
   try {
-    if (!cachedSecret) {
+    if (!cachedSecret || Date.now() > cacheExpiry) {
       const response = await secretsManager.send(
         new GetSecretValueCommand({ SecretId: process.env.JWT_SECRET })
       );
       cachedSecret = JSON.parse(response.SecretString).jwtSecret;
+      cacheExpiry = Date.now() + CACHE_TTL_MS;
     }
 
     const token = jwt.sign(

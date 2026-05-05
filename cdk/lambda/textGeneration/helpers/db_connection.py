@@ -52,7 +52,7 @@ def get_db_connection():
             try: 
                 connection.close()
             except: 
-                pass
+                logger.warning(f"Failed to close DB connection during cleanup: {close_err}")
             connection = None
         logger.error(f"Failed to connect to database: {e}")
         raise e
