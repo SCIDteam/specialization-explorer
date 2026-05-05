@@ -5,12 +5,31 @@ const {
 } = require("@aws-sdk/client-secrets-manager");
 const { Client } = require("pg");
 const crypto = require("crypto");
-const fs = require("fs");
+const https = require("https");
 const path = require("path");
 const migrate = require("node-pg-migrate").default;
 
-// RDS CA bundle — bundled with the Lambda package
-const RDS_CA = fs.readFileSync(path.join(__dirname, "global-bundle.pem"));
+const RDS_CA_URL = "https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem";
+
+function fetchCert(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve(Buffer.concat(chunks)));
+      res.on("error", reject);
+    }).on("error", reject);
+  });
+}
+
+let cachedCert = null;
+
+async function getRdsCa() {
+  if (!cachedCert) {
+    cachedCert = await fetchCert(RDS_CA_URL);
+  }
+  return cachedCert;
+}
 
 const sm = new SecretsManagerClient();
 
@@ -29,6 +48,7 @@ async function putSecret(name, secret) {
 }
 
 async function runMigrations(db) {
+  const RDS_CA = await getRdsCa();
   const dbUrl = `postgresql://${encodeURIComponent(
     db.username
   )}:${encodeURIComponent(db.password)}@${db.host}:${db.port || 5432}/${
@@ -58,6 +78,7 @@ async function createAppUsers(
   userSecretName,
   tableCreatorSecretName
 ) {
+  const RDS_CA = await getRdsCa();
   const adminClient = new Client({
     user: adminDb.username,
     password: adminDb.password,

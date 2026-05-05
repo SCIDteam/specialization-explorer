@@ -3,13 +3,6 @@ info:
   title: specEx API
   description: Specialization Explorer API
   version: 1.0.0
-servers:
-  - url: https://{apiId}.execute-api.ca-central-1.amazonaws.com/prod
-    variables:
-      apiId:
-        default: unknown
-security:
-  - userAuthorizer: []
 tags:
   - name: User
     description: endpoints accessible by the general public
@@ -1611,7 +1604,6 @@ paths:
         - Public
       summary: Get a JWT token for non-authenticated user
       operationId: get_public_token
-      security: []
       responses:
         "200":
           description: JWT token

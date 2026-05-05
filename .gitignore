@@ -38,3 +38,5 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# RDS CA bundle — downloaded at deploy time
