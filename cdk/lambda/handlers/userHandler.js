@@ -5,6 +5,7 @@ const {
   GetSecretValueCommand,
 } = require("@aws-sdk/client-secrets-manager");
 const crypto = require("crypto");
+const { validateUUID } = require("./utils/validation.js");
 
 let sqlConnection;
 const secretsManager = new SecretsManagerClient();
@@ -119,9 +120,10 @@ exports.handler = async (event) => {
 
       case "GET /user/{user_id}": {
         const userId = event.pathParameters?.user_id;
-        if (!userId) {
+        const userIdValidation = validateUUID(userId, "user_id");
+        if (!userIdValidation.valid) {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_id is required" });
+          response.body = JSON.stringify({ error: userIdValidation.error });
           break;
         }
 
@@ -150,10 +152,10 @@ exports.handler = async (event) => {
       // Update's user with email so they no longer will be anonymous
       case "PUT /user/{user_id}": {
         const userId = event.pathParameters?.user_id;
-
-        if (!userId) {
+        const userIdValidation = validateUUID(userId, "user_id");
+        if (!userIdValidation.valid) {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_id is required" });
+          response.body = JSON.stringify({ error: userIdValidation.error });
           break;
         }
 
@@ -239,14 +241,16 @@ exports.handler = async (event) => {
         const userId = event.pathParameters?.user_id;
         const chatSessionId = event.pathParameters?.chat_session_id;
 
-        if (!userId) {
+        const userIdValidation = validateUUID(userId, "user_id");
+        if (!userIdValidation.valid) {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "user_id is required" });
+          response.body = JSON.stringify({ error: userIdValidation.error });
           break;
         }
-        if (!chatSessionId) {
+        const sessionIdValidation = validateUUID(chatSessionId, "chat_session_id");
+        if (!sessionIdValidation.valid) {
           response.statusCode = 400;
-          response.body = JSON.stringify({ error: "chat_session_id is required" });
+          response.body = JSON.stringify({ error: sessionIdValidation.error });
           break;
         }
 

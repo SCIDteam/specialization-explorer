@@ -12,8 +12,9 @@ const getAllowedOrigins = async () => {
     const response = await ssm.send(command);
     cachedAllowedOrigins = response.Parameter.Value.split(',').map(s => s.trim().replace(/\/$/, ''));
   } catch (error) {
-    console.error("Failed to fetch CORS origins from SSM:", error);
-    cachedAllowedOrigins = ["*"];
+    console.error("CRITICAL: Failed to fetch CORS origins from SSM — blocking all cross-origin requests:", error);
+    // Do not cache — allow retry on next request once SSM recovers
+    return [];
   }
   return cachedAllowedOrigins;
 };
