@@ -17,6 +17,7 @@ This guide covers practical modifications developers commonly need to make: styl
 - [Message/Token Limit Management](#messagetoken-limit-management)
 - [Data Ingestion Modifications](#data-ingestion-modifications)
 - [Deployment & Testing](#deployment--testing)
+- [Encryption & KMS Keys](#encryption--kms-keys)
 - [Troubleshooting & Best Practices](#troubleshooting--best-practices)
 
 ---
@@ -232,6 +233,14 @@ npm run build   # production build
 Run the dev server manually with `npm run dev` (Vite).
 
 **CI/CD:** See `Docs/DEPLOYMENT_GUIDE.md` for pipeline specifics.
+
+---
+
+## Encryption & KMS Keys
+
+By default, all encrypted resources in this project (RDS, S3, Secrets Manager, OpenSearch Serverless) use AWS managed keys. No configuration is required to use them, but they offer limited control over key rotation, auditing, and cross-account access.
+
+If your organization requires customer-managed KMS keys (CMKs), see [`Docs/AWS_MANAGED_KEYS.md`](./AWS_MANAGED_KEYS.md) for a full list of affected resources and the exact CDK property changes needed in each stack.
 
 ---
 
