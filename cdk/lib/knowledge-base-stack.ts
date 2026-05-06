@@ -180,6 +180,7 @@ export class KnowledgeBaseStack extends Stack {
     });
 
     // Use account and region for uniqueness (see https://aws.amazon.com/blogs/aws/introducing-account-regional-namespaces-for-amazon-s3-general-purpose-buckets/)
+    // The "*" origin is a placeholder, it is updated by the amplify-stack with the amplify-url to restrict request only to our application
     this.knowledgeBaseBucket = new s3.Bucket(this, "KnowledgeBaseBucket", {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
