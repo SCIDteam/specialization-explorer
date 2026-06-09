@@ -89,7 +89,7 @@ export class DatabaseStack extends Stack {
       `${id}-rdsParameterGroup`,
       {
         engine: rds.DatabaseInstanceEngine.postgres({
-          version: rds.PostgresEngineVersion.VER_16_8,
+          version: rds.PostgresEngineVersion.of('16.9', '16'), // changed to a supported version in ca-central-1 to avoid deployment failure 
         }),
         description: "Empty parameter group",
         parameters: {
@@ -107,7 +107,7 @@ export class DatabaseStack extends Stack {
         subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
       },
       engine: rds.DatabaseInstanceEngine.postgres({
-        version: rds.PostgresEngineVersion.VER_16_8,
+        version: rds.PostgresEngineVersion.of('16.9', '16'), // changed to a supported version in ca-central-1 to avoid deployment failure
       }),
       instanceType: ec2.InstanceType.of(
         ec2.InstanceClass.BURSTABLE4_GRAVITON,

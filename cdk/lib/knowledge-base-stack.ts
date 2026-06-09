@@ -73,6 +73,12 @@ export class KnowledgeBaseStack extends Stack {
     vpcEndpointSg.addIngressRule(ec2.Peer.ipv4(props.vpcCidr), ec2.Port.tcp(443), 'Allow HTTPS from VPC CIDR');
     vpcEndpointSg.addIngressRule(lambdaSg, ec2.Port.tcp(443), 'Allow HTTPS from Lambda SG');
 
+    /* * DEPLOYMENT_CHANGE_10: Removed OpenSearch Serverless VPC Endpoint creation.
+     * Corporate AWS SCPs explicitly deny 'ec2:CreateVpcEndpoint'. Commenting this out 
+     * prevents 403 access denied errors during stack deployment. Network routing will 
+     * pivot to public access endpoints secured by IAM Data Access Policies.
+     */
+    /*
     // OpenSearch Serverless VPC endpoint in private subnets
     const aossVpcEndpoint = new opensearchserverless.CfnVpcEndpoint(this, 'AossVpcEndpoint', {
       name: `${collectionName}-vpce`,
@@ -80,6 +86,7 @@ export class KnowledgeBaseStack extends Stack {
       subnetIds: props.vpc.privateSubnets.map(s => s.subnetId),
       securityGroupIds: [vpcEndpointSg.securityGroupId],
     });
+    */
 
     // Account-level capacity limits set to minimum 2/2 OCUs
     new AwsCustomResource(this, "OSSCapacityLimits", {
@@ -115,6 +122,12 @@ export class KnowledgeBaseStack extends Stack {
       }),
     });
 
+    /* * DEPLOYMENT_CHANGE_11: Switched Network Policy from Private to Public Access.
+     * Since corporate network rules prevent local VPC Endpoints, the collection access 
+     * policy is modified to set 'AllowFromPublic: true'. The endpoint remains securely locked down 
+     * from data plane queries via the standard OpenSearch Serverless Data Access Policies.
+     * Removed the explicit structural dependency on 'aossVpcEndpoint'.
+     */
     // Create network policy for OpenSearch Serverless (private access via VPC endpoint and Bedrock service)
     const networkPolicy = new opensearchserverless.CfnSecurityPolicy(this, "NetworkPolicy", {
       name: `${collectionName}-net`,
@@ -124,12 +137,10 @@ export class KnowledgeBaseStack extends Stack {
           { ResourceType: "collection", Resource: [`collection/${collectionName}`] },
           { ResourceType: "dashboard", Resource: [`collection/${collectionName}`] },
         ],
-        AllowFromPublic: false,
-        SourceVPCEs: [aossVpcEndpoint.attrId],
-        SourceServices: ['bedrock.amazonaws.com'],
+        AllowFromPublic: true,
       }]),
     });
-    networkPolicy.addDependency(aossVpcEndpoint); // Ensure VPC endpoint exists first
+    // networkPolicy.addDependency(aossVpcEndpoint); // Deprecated due to endpoint deprovisioning
 
     // IAM role for Bedrock Knowledge Base
     const knowledgeBaseRole = new iam.Role(this, "KnowledgeBaseRole", {

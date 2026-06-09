@@ -20,64 +20,75 @@ export class VpcStack extends Stack {
     props: StackProps & { stackPrefix: string }
   ) {
     super(scope, id, props);
-    const existingVpcId: string = ""; // CHANGE IF DEPLOYING WITH EXISTING VPC
+
+    /* * DEPLOYMENT_CHANGE_1: Hardcoded target VPC ID.
+     * Originally left blank (""), skipping custom networking blocks and forcing 
+     * clean VPC creation. Populating this routes execution into the lookup architecture.
+     */
+    const existingVpcId: string = "vpc-0c71ea24e02b20a87"; // CHANGE IF DEPLOYING WITH EXISTING VPC
 
     if (existingVpcId !== "") {
-      const AWSControlTowerStackSet = ""; // CHANGE TO YOUR CONTROL TOWER STACK SET
+      const AWSControlTowerStackSet = "prd-scid-devapps-prd-vpc"; // CHANGE TO YOUR CONTROL TOWER STACK SET
       const existingPublicSubnetID: string = ""; // CHANGE IF DEPLOYING WITH EXISTING PUBLIC SUBNET
 
       const latPrefix = props.stackPrefix;
 
       const publicSubnetCidr = "172.31.0.0/20"; // CHANGE TO YOUR PUBLIC SUBNET CIDR; IT MUST NOT OVERLAP WITH PRIVATE SUBNETS
-      this.vpcCidrString = "172.31.0.0/16";
+      this.vpcCidrString = "10.0.0.0/8"; // CHANGE TO YOUR VPC CIDR; IT MUST ENCOMPASS ALL SUBNET CIDRS
+      
+      /* * DEPLOYMENT_CHANGE_2: Direct Main Route Table Constant Mapping.
+       * Imported VPC resources do not expose sub-properties like '.routeTable' natively in CDK.
+       * Hardcoding this variable prevents TypeError undefined crashes during local synthesis.
+       */
+      const rawRouteTableId = "rtb-0ac1036af06fc5e15";
 
       // VPC for application
+      /* * DEPLOYMENT_CHANGE_3: Refactored ec2.Vpc.fromVpcAttributes.
+       * Bypassed all dynamic 'Fn.importValue' hooks because the corporate network stack 
+       * does not expose globally unique Export Names. Swapped out 3 AZ mappings down to 
+       * 2 AZs (ca-central-1a / ca-central-1b) to mirror corporate network architecture layout bounds.
+       */
       this.vpc = ec2.Vpc.fromVpcAttributes(this, `${id}-Vpc`, {
-        vpcId: existingVpcId,
-        availabilityZones: ["ca-central-1a", "ca-central-1b", "ca-central-1d"],
+        vpcId: 'vpc-0c71ea24e02b20a87',
+        availabilityZones: ['ca-central-1a', 'ca-central-1b'],
         privateSubnetIds: [
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet1AID`),
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet2AID`),
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet3AID`),
+          'subnet-0f84a5f17325314a4', // prd-prd-scid-devapps-prd-vpc-back-ca-central-1a
+          'subnet-0b6829a0a24226c53'  // prd-prd-scid-devapps-prd-vpc-back-ca-central-1b
         ],
         privateSubnetRouteTableIds: [
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet1ARouteTable`
-          ),
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet2ARouteTable`
-          ),
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet3ARouteTable`
-          ),
+          rawRouteTableId,
+          rawRouteTableId
         ],
         isolatedSubnetIds: [
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet1AID`),
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet2AID`),
-          Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet3AID`),
+          'subnet-0f84a5f17325314a4',
+          'subnet-0b6829a0a24226c53'
         ],
         isolatedSubnetRouteTableIds: [
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet1ARouteTable`
-          ),
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet2ARouteTable`
-          ),
-          Fn.importValue(
-            `${AWSControlTowerStackSet}-PrivateSubnet3ARouteTable`
-          ),
+          rawRouteTableId,
+          rawRouteTableId
         ],
-        vpcCidrBlock: Fn.importValue(`${AWSControlTowerStackSet}-VPCCIDR`),
+       // Updated to match your corporate network's internal IP block
+        vpcCidrBlock: '10.0.0.0/8'
       }) as ec2.Vpc;
 
       // Extract CIDR ranges from the private subnets
+      /* * DEPLOYMENT_CHANGE_4: Replaced Private Subnet CIDR Import Array.
+       * Replaced cross-stack references with direct literal network CIDR string block notation 
+       * to keep security group dependencies compiling cleanly without lookups.
+       */
       this.privateSubnetsCidrStrings = [
-        Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet1ACIDR`),
-        Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet2ACIDR`),
-        Fn.importValue(`${AWSControlTowerStackSet}-PrivateSubnet3ACIDR`),
+        '10.0.0.0/8',
+        '172.31.0.0/16'
       ];
 
-      if (existingPublicSubnetID === "") {
+      /* * DEPLOYMENT_CHANGE_5: Deactivated Public Network Infrastructure Generation Blocks.
+       * Corporate AWS Organization SCPs explicitly forbid project accounts from provisioning Subnets, 
+       * Internet Gateways, Elastic IPs, or changing Route Tables. Commenting out this entire block 
+       * prevents 403 access denied errors since internet traffic routing is centrally managed by Transit Gateways.
+       */
+      console.log("Skipping all public network infrastructure provisioning due to corporate SCP constraints.");
+      
+      /* if (existingPublicSubnetID === "") {
         console.log(
           "No public subnet exists. Creating new public subnet, IGW, and NAT GW."
         );
@@ -123,19 +134,13 @@ export class VpcStack extends Stack {
 
         // Update route table for private subnets
         new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute1`, {
-          routeTableId: this.vpc.privateSubnets[0].routeTable.routeTableId,
+          routeTableId: rawRouteTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
 
         new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute2`, {
-          routeTableId: this.vpc.privateSubnets[1].routeTable.routeTableId,
-          destinationCidrBlock: "0.0.0.0/0",
-          natGatewayId: natGateway.ref,
-        });
-
-        new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute3`, {
-          routeTableId: this.vpc.privateSubnets[2].routeTable.routeTableId,
+          routeTableId: rawRouteTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
@@ -175,9 +180,6 @@ export class VpcStack extends Stack {
           "InternetGateways.0.InternetGatewayId"
         );
 
-        // If no IGW exists, create one and attach it
-        // (This is a fallback — most existing VPCs with a public subnet already have an IGW)
-
         // Add a NAT Gateway in the existing public subnet
         const natGateway = new ec2.CfnNatGateway(this, `NatGateway`, {
           subnetId: existingPublicSubnetID,
@@ -186,24 +188,27 @@ export class VpcStack extends Stack {
 
         // Update route table for private subnets to route internet traffic through NAT
         new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute1`, {
-          routeTableId: this.vpc.privateSubnets[0].routeTable.routeTableId,
+          routeTableId: rawRouteTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
 
         new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute2`, {
-          routeTableId: this.vpc.privateSubnets[1].routeTable.routeTableId,
-          destinationCidrBlock: "0.0.0.0/0",
-          natGatewayId: natGateway.ref,
-        });
-
-        new ec2.CfnRoute(this, `${latPrefix}PrivateSubnetRoute3`, {
-          routeTableId: this.vpc.privateSubnets[2].routeTable.routeTableId,
+          routeTableId: rawRouteTableId,
           destinationCidrBlock: "0.0.0.0/0",
           natGatewayId: natGateway.ref,
         });
       }
+      */
 
+      /* * DEPLOYMENT_CHANGE_6: Deactivated Local VPC Endpoint Creation.
+       * Corporate SCPs block 'ec2:CreateVpcEndpoint'. Interface/Gateway endpoints for 
+       * SSM, Secrets Manager, RDS, DynamoDB, and S3 are managed at the central network hub level. 
+       * Commenting these out avoids 403 access denied errors.
+       */
+      console.log("Skipping local VPC endpoint creation due to corporate SCP constraints.");
+      
+      /*
       // Add interface endpoints for private isolated subnets
       this.vpc.addInterfaceEndpoint("SSM Endpoint", {
         service: ec2.InterfaceVpcEndpointAwsService.SSM,
@@ -236,6 +241,7 @@ export class VpcStack extends Stack {
         service: ec2.GatewayVpcEndpointAwsService.S3,
         subnets: [{ subnetType: ec2.SubnetType.PRIVATE_ISOLATED }],
       });
+      */
 
       // Get default security group for VPC
       const defaultSecurityGroup = ec2.SecurityGroup.fromSecurityGroupId(
