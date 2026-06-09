@@ -5,6 +5,7 @@ import {
 } from "@aws-cdk/aws-amplify-alpha";
 import * as cdk from "aws-cdk-lib";
 import { BuildSpec } from "aws-cdk-lib/aws-codebuild";
+import * as iam from "aws-cdk-lib/aws-iam"; // ◄--- Added for IAM Role
 import { Construct } from "constructs";
 import * as yaml from "yaml";
 import { ApiGatewayStack } from "./api-stack";
